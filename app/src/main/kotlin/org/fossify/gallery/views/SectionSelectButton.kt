@@ -38,7 +38,8 @@ class SectionSelectButton @JvmOverloads constructor(
         }
 
         val sectionPosition = recyclerView.getChildAdapterPosition(sectionItemView)
-        if (sectionPosition == RecyclerView.NO_POSITION || adapter.media.getOrNull(sectionPosition) !is ThumbnailSection) {
+        val isSectionHeader = adapter.media.getOrNull(sectionPosition) is ThumbnailSection
+        if (sectionPosition == RecyclerView.NO_POSITION || !isSectionHeader) {
             return
         }
 
