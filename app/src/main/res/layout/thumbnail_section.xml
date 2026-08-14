@@ -1,8 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<org.fossify.commons.views.MyTextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/thumbnail_section"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:clickable="false"
-    android:padding="@dimen/activity_margin"
-    android:textSize="@dimen/bigger_text_size" />
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/activity_margin"
+    android:paddingTop="@dimen/activity_margin"
+    android:paddingEnd="@dimen/activity_margin"
+    android:paddingBottom="@dimen/activity_margin">
+
+    <org.fossify.gallery.views.SectionSelectButton
+        android:id="@+id/thumbnail_section_select"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@null"
+        android:padding="4dp"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_section_select_outline"
+        android:tint="?android:attr/textColorPrimary"
+        tools:ignore="UseAppTint" />
+
+    <org.fossify.commons.views.MyTextView
+        android:id="@+id/thumbnail_section"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_weight="1"
+        android:textSize="@dimen/bigger_text_size" />
+
+</LinearLayout>
