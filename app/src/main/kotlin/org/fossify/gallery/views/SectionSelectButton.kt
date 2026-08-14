@@ -8,15 +8,12 @@ import androidx.appcompat.widget.AppCompatImageView
 import androidx.recyclerview.widget.RecyclerView
 import org.fossify.gallery.R
 import org.fossify.gallery.adapters.MediaAdapter
-import org.fossify.gallery.models.Medium
 import org.fossify.gallery.models.ThumbnailSection
-import java.lang.reflect.Field
-import java.lang.reflect.Method
 
 /**
  * Selects or deselects every media item that belongs to one date section.
  *
- * The control also reflects manual selection changes, supports partial selection,
+ * The control reflects manual selection changes, supports partial selection,
  * and preserves selections made in other date sections.
  */
 class SectionSelectButton @JvmOverloads constructor(
@@ -69,19 +66,17 @@ class SectionSelectButton @JvmOverloads constructor(
             return
         }
 
-        val positions = getSectionMediumPositions(adapter, sectionContext.sectionPosition)
+        val positions = DateSectionSelectionController.getSectionPositions(
+            adapter,
+            sectionContext.sectionPosition,
+        )
         if (positions.isEmpty()) {
             return
         }
 
-        val selectedKeys = getSelectedKeys(adapter) ?: return
-        val allSelected = positions.all { position ->
-            val key = adapter.getItemSelectionKey(position)
-            key != null && selectedKeys.contains(key)
-        }
-
-        if (allSelected) {
-            applySectionSelection(adapter, positions, select = false)
+        if (DateSectionSelectionController.areAllSelected(adapter, positions)) {
+            DateSectionSelectionController.applySelection(adapter, positions, select = false)
+            scheduleRefresh()
         } else {
             ensureSelectionModeAndSelect(sectionContext.recyclerView, adapter, positions)
         }
@@ -93,9 +88,9 @@ class SectionSelectButton @JvmOverloads constructor(
         positions: List<Int>,
         attempt: Int = 0,
     ) {
-        val selectedKeys = getSelectedKeys(adapter) ?: return
-        if (selectedKeys.isNotEmpty()) {
-            applySectionSelection(adapter, positions, select = true)
+        if (DateSectionSelectionController.hasSelection(adapter)) {
+            DateSectionSelectionController.applySelection(adapter, positions, select = true)
+            scheduleRefresh()
             return
         }
 
@@ -103,8 +98,9 @@ class SectionSelectButton @JvmOverloads constructor(
         val firstHolder = recyclerView.findViewHolderForAdapterPosition(firstPosition)
         if (firstHolder != null) {
             firstHolder.itemView.performLongClick()
-            if (getSelectedKeys(adapter)?.isNotEmpty() == true) {
-                applySectionSelection(adapter, positions, select = true)
+            if (DateSectionSelectionController.hasSelection(adapter)) {
+                DateSectionSelectionController.applySelection(adapter, positions, select = true)
+                scheduleRefresh()
             }
             return
         }
@@ -127,33 +123,6 @@ class SectionSelectButton @JvmOverloads constructor(
         )
     }
 
-    private fun applySectionSelection(
-        adapter: MediaAdapter,
-        positions: List<Int>,
-        select: Boolean,
-    ) {
-        val selectedKeys = getSelectedKeys(adapter) ?: return
-        val toggleMethod = getToggleSelectionMethod(adapter) ?: return
-
-        for (position in positions) {
-            val key = adapter.getItemSelectionKey(position) ?: continue
-            val isSelected = selectedKeys.contains(key)
-            if (isSelected != select) {
-                val succeeded = runCatching {
-                    toggleMethod.invoke(adapter, select, position, false)
-                }.isSuccess
-                if (!succeeded) {
-                    return
-                }
-            }
-        }
-
-        getUpdateTitleMethod(adapter)?.let { method ->
-            runCatching { method.invoke(adapter) }
-        }
-        scheduleRefresh()
-    }
-
     private fun refreshState() {
         val sectionContext = findSectionContext() ?: return
         val adapter = sectionContext.adapter
@@ -165,11 +134,11 @@ class SectionSelectButton @JvmOverloads constructor(
         }
 
         visibility = View.VISIBLE
-        val positions = getSectionMediumPositions(adapter, sectionContext.sectionPosition)
-        val selectedKeys = getSelectedKeys(adapter) ?: return
-        val selectedCount = positions.count { position ->
-            adapter.getItemSelectionKey(position)?.let(selectedKeys::contains) == true
-        }
+        val positions = DateSectionSelectionController.getSectionPositions(
+            adapter,
+            sectionContext.sectionPosition,
+        )
+        val selectedCount = DateSectionSelectionController.getSelectedCount(adapter, positions)
         val totalCount = positions.size
 
         isEnabled = totalCount > 0
@@ -248,76 +217,6 @@ class SectionSelectButton @JvmOverloads constructor(
         )
     }
 
-    private fun getSectionMediumPositions(
-        adapter: MediaAdapter,
-        sectionPosition: Int,
-    ): List<Int> {
-        val nextSectionPosition = ((sectionPosition + 1) until adapter.media.size)
-            .firstOrNull { adapter.media[it] is ThumbnailSection }
-            ?: adapter.media.size
-
-        return ((sectionPosition + 1) until nextSectionPosition)
-            .filter { adapter.media[it] is Medium }
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    private fun getSelectedKeys(adapter: MediaAdapter): MutableSet<Int>? {
-        val field = getSelectedKeysField(adapter) ?: return null
-        return runCatching { field.get(adapter) as? MutableSet<Int> }.getOrNull()
-    }
-
-    private fun getSelectedKeysField(adapter: MediaAdapter): Field? {
-        return findField(adapter.javaClass, SELECTED_KEYS_FIELD)
-    }
-
-    private fun getToggleSelectionMethod(adapter: MediaAdapter): Method? {
-        return findMethod(
-            adapter.javaClass,
-            TOGGLE_SELECTION_METHOD,
-            Boolean::class.javaPrimitiveType!!,
-            Int::class.javaPrimitiveType!!,
-            Boolean::class.javaPrimitiveType!!,
-        )
-    }
-
-    private fun getUpdateTitleMethod(adapter: MediaAdapter): Method? {
-        return findMethod(adapter.javaClass, UPDATE_TITLE_METHOD)
-    }
-
-    private fun findField(startClass: Class<*>, name: String): Field? {
-        var currentClass: Class<*>? = startClass
-        while (currentClass != null) {
-            val field = runCatching {
-                currentClass.getDeclaredField(name).apply { isAccessible = true }
-            }.getOrNull()
-            if (field != null) {
-                return field
-            }
-            currentClass = currentClass.superclass
-        }
-        return null
-    }
-
-    private fun findMethod(
-        startClass: Class<*>,
-        name: String,
-        vararg parameterTypes: Class<*>,
-    ): Method? {
-        var currentClass: Class<*>? = startClass
-        while (currentClass != null) {
-            val method = runCatching {
-                currentClass.getDeclaredMethod(name, *parameterTypes).apply {
-                    isAccessible = true
-                }
-            }.getOrNull()
-            if (method != null) {
-                return method
-            }
-            currentClass = currentClass.superclass
-        }
-        return null
-    }
-
     private data class SectionContext(
         val recyclerView: RecyclerView,
         val sectionItemView: View,
@@ -328,8 +227,5 @@ class SectionSelectButton @JvmOverloads constructor(
     private companion object {
         const val MAX_LAYOUT_RETRIES = 3
         const val RETRY_DELAY_MS = 32L
-        const val SELECTED_KEYS_FIELD = "selectedKeys"
-        const val TOGGLE_SELECTION_METHOD = "toggleItemSelection"
-        const val UPDATE_TITLE_METHOD = "updateTitle"
     }
 }
