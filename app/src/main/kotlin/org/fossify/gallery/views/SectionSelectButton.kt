@@ -3,6 +3,7 @@ package org.fossify.gallery.views
 import android.content.Context
 import android.util.AttributeSet
 import android.view.View
+import android.widget.TextView
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.recyclerview.widget.RecyclerView
 import org.fossify.gallery.R
@@ -134,15 +135,22 @@ class SectionSelectButton @JvmOverloads constructor(
         val selectedKeys = getSelectedKeys(adapter) ?: return
         val toggleMethod = getToggleSelectionMethod(adapter) ?: return
 
-        positions.forEach { position ->
-            val key = adapter.getItemSelectionKey(position) ?: return@forEach
+        for (position in positions) {
+            val key = adapter.getItemSelectionKey(position) ?: continue
             val isSelected = selectedKeys.contains(key)
             if (isSelected != select) {
-                toggleMethod.invoke(adapter, select, position, false)
+                val succeeded = runCatching {
+                    toggleMethod.invoke(adapter, select, position, false)
+                }.isSuccess
+                if (!succeeded) {
+                    return
+                }
             }
         }
 
-        getUpdateTitleMethod(adapter)?.invoke(adapter)
+        getUpdateTitleMethod(adapter)?.let { method ->
+            runCatching { method.invoke(adapter) }
+        }
         scheduleRefresh()
     }
 
@@ -165,13 +173,15 @@ class SectionSelectButton @JvmOverloads constructor(
         val totalCount = positions.size
 
         isEnabled = totalCount > 0
-        setImageResource(
-            when {
-                totalCount > 0 && selectedCount == totalCount -> R.drawable.ic_section_select_checked
-                selectedCount > 0 -> R.drawable.ic_section_select_partial
-                else -> R.drawable.ic_section_select_outline
+        val iconResource = when {
+            totalCount > 0 && selectedCount == totalCount -> {
+                R.drawable.ic_section_select_checked
             }
-        )
+
+            selectedCount > 0 -> R.drawable.ic_section_select_partial
+            else -> R.drawable.ic_section_select_outline
+        }
+        setImageResource(iconResource)
 
         val section = adapter.media[sectionContext.sectionPosition] as ThumbnailSection
         val title = when {
@@ -180,7 +190,9 @@ class SectionSelectButton @JvmOverloads constructor(
             else -> "${section.title} · $selectedCount/$totalCount"
         }
 
-        sectionContext.sectionItemView.findViewById<android.widget.TextView>(R.id.thumbnail_section)?.text = title
+        sectionContext.sectionItemView
+            .findViewById<TextView>(R.id.thumbnail_section)
+            ?.text = title
         contentDescription = title
     }
 
@@ -251,7 +263,7 @@ class SectionSelectButton @JvmOverloads constructor(
     @Suppress("UNCHECKED_CAST")
     private fun getSelectedKeys(adapter: MediaAdapter): MutableSet<Int>? {
         val field = getSelectedKeysField(adapter) ?: return null
-        return field.get(adapter) as? MutableSet<Int>
+        return runCatching { field.get(adapter) as? MutableSet<Int> }.getOrNull()
     }
 
     private fun getSelectedKeysField(adapter: MediaAdapter): Field? {
@@ -262,9 +274,9 @@ class SectionSelectButton @JvmOverloads constructor(
         return findMethod(
             adapter.javaClass,
             TOGGLE_SELECTION_METHOD,
-            Boolean::class.javaPrimitiveType,
-            Int::class.javaPrimitiveType,
-            Boolean::class.javaPrimitiveType,
+            Boolean::class.javaPrimitiveType!!,
+            Int::class.javaPrimitiveType!!,
+            Boolean::class.javaPrimitiveType!!,
         )
     }
 
@@ -275,8 +287,11 @@ class SectionSelectButton @JvmOverloads constructor(
     private fun findField(startClass: Class<*>, name: String): Field? {
         var currentClass: Class<*>? = startClass
         while (currentClass != null) {
-            runCatching {
-                return currentClass.getDeclaredField(name).apply { isAccessible = true }
+            val field = runCatching {
+                currentClass.getDeclaredField(name).apply { isAccessible = true }
+            }.getOrNull()
+            if (field != null) {
+                return field
             }
             currentClass = currentClass.superclass
         }
@@ -286,14 +301,17 @@ class SectionSelectButton @JvmOverloads constructor(
     private fun findMethod(
         startClass: Class<*>,
         name: String,
-        vararg parameterTypes: Class<*>?,
+        vararg parameterTypes: Class<*>,
     ): Method? {
         var currentClass: Class<*>? = startClass
         while (currentClass != null) {
-            runCatching {
-                return currentClass.getDeclaredMethod(name, *parameterTypes).apply {
+            val method = runCatching {
+                currentClass.getDeclaredMethod(name, *parameterTypes).apply {
                     isAccessible = true
                 }
+            }.getOrNull()
+            if (method != null) {
+                return method
             }
             currentClass = currentClass.superclass
         }
