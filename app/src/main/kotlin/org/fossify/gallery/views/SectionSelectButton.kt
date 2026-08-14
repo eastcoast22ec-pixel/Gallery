@@ -11,6 +11,7 @@ import org.fossify.gallery.models.ThumbnailSection
 
 /**
  * Selects every media item that belongs to the date section containing this button.
+ * Date headers themselves remain non-selectable, matching the existing adapter behavior.
  *
  * The Gallery adapter already owns a stable range-selection implementation. This view
  * intentionally reuses that implementation instead of duplicating selection state.
