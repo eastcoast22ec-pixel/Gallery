@@ -18,12 +18,17 @@ jobs:
     steps:
       - name: Fetch and validate request
         env:
-          REQUEST_URL: https://raw.githubusercontent.com/eastcoast22ec-pixel/Gallery/${{ github.sha }}/courier/request.json
+          REQUEST_API: https://api.github.com/repos/eastcoast22ec-pixel/Gallery/contents/courier/request.json?ref=${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           umask 077
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-            "$REQUEST_URL" -o /tmp/request-source.json
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+            --retry 2 --retry-delay 1 --retry-all-errors \
+            -H 'Accept: application/vnd.github.raw+json' \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "$REQUEST_API" -o /tmp/request-source.json
           GITHUB_SHA_VALUE="$GITHUB_SHA" python3 - <<'PY'
           import hashlib, json, os
           src = json.load(open('/tmp/request-source.json', encoding='utf-8'))
