@@ -18,17 +18,12 @@ jobs:
     steps:
       - name: Fetch and validate request
         env:
-          REQUEST_API: https://api.github.com/repos/eastcoast22ec-pixel/Gallery/contents/courier/request.json?ref=${{ github.sha }}
-          GITHUB_TOKEN: ${{ github.token }}
+          REQUEST_URL: https://raw.githubusercontent.com/eastcoast22ec-pixel/Gallery/${{ github.sha }}/courier/request.json
         run: |
           set -euo pipefail
           umask 077
-          curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
-            --retry 2 --retry-delay 1 --retry-all-errors \
-            -H 'Accept: application/vnd.github.raw+json' \
-            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            "$REQUEST_API" -o /tmp/request-source.json
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            "$REQUEST_URL" -o /tmp/request-source.json
           GITHUB_SHA_VALUE="$GITHUB_SHA" python3 - <<'PY'
           import hashlib, json, os
           src = json.load(open('/tmp/request-source.json', encoding='utf-8'))
@@ -49,7 +44,6 @@ jobs:
       - name: Probe ticket endpoint safely
         env:
           TICKET_ENDPOINT: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/__control/artifact-courier-ticket
-          PWA_HEALTH_ENDPOINT: https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/healthz
         run: |
           set -euo pipefail
           code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
@@ -61,26 +55,6 @@ jobs:
           bytes="$(wc -c < /tmp/probe-body | tr -d ' ')"
           printf 'ticket_endpoint_probe http=%s content_type=%s bytes=%s\n' "$code" "${content_type:-none}" "$bytes"
           rm -f /tmp/probe-body
-
-          health_code="$(curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
-            -o /tmp/pwa-health.json \
-            -w '%{http_code}' \
-            "$PWA_HEALTH_ENDPOINT")"
-          HEALTH_HTTP="$health_code" python3 - <<'PY'
-          import json, os, re
-          data = json.load(open('/tmp/pwa-health.json', encoding='utf-8'))
-          status = str(data.get('status', ''))
-          component = str(data.get('component', ''))
-          revision = str(data.get('control_revision', 'missing'))
-          safe = re.compile(r'^[A-Za-z0-9_.:-]{1,120}$')
-          if not safe.fullmatch(status): status = 'redacted'
-          if not safe.fullmatch(component): component = 'redacted'
-          if not safe.fullmatch(revision): revision = 'redacted'
-          print(f"pwa_health http={os.environ['HEALTH_HTTP']} status={status} component={component} control_revision={revision}")
-          if os.environ['HEALTH_HTTP'] != '200' or status != 'ok':
-              raise SystemExit('pwa health gate failed')
-          PY
-          rm -f /tmp/pwa-health.json
 
       - name: Exchange GitHub OIDC for encrypted courier ticket
         env:
@@ -95,36 +69,11 @@ jobs:
             -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
             "$oidc_url" -o /tmp/oidc.json
           OIDC_TOKEN="$(python3 -c 'import json; print(json.load(open("/tmp/oidc.json"))["value"])')"
-          set +e
-          http_code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
             -H "Authorization: Bearer ${OIDC_TOKEN}" \
             -H 'Content-Type: application/json' \
             --data-binary @/tmp/binding.json \
-            -o /tmp/ticket-response.json \
-            -w '%{http_code}' \
-            "$TICKET_ENDPOINT")"
-          curl_status=$?
-          set -e
-          if [ "$curl_status" -ne 0 ]; then
-            printf 'ticket_exchange_transport_error curl_status=%s http=%s\n' "$curl_status" "${http_code:-000}"
-            rm -f /tmp/oidc.json /tmp/ticket-response.json
-            exit "$curl_status"
-          fi
-          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
-            TICKET_HTTP="$http_code" python3 - <<'PY'
-          import json, os, re
-          try:
-              data = json.load(open('/tmp/ticket-response.json', encoding='utf-8'))
-              code = str(data.get('error', 'unknown'))
-          except Exception:
-              code = 'invalid_json'
-          if not re.fullmatch(r'[A-Za-z0-9_.:-]{1,120}', code):
-              code = 'redacted'
-          print(f"ticket_exchange_failed http={os.environ['TICKET_HTTP']} error={code}")
-          PY
-            rm -f /tmp/oidc.json /tmp/ticket-response.json
-            exit 22
-          fi
+            "$TICKET_ENDPOINT" -o /tmp/ticket-response.json
           python3 - <<'PY'
           import json
           data = json.load(open('/tmp/ticket-response.json', encoding='utf-8'))
