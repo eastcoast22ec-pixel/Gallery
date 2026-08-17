@@ -41,6 +41,21 @@ jobs:
           open('/tmp/audience.txt', 'w', encoding='utf-8').write(audience)
           PY
 
+      - name: Probe ticket endpoint safely
+        env:
+          TICKET_ENDPOINT: https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/__control/artifact-courier-ticket
+        run: |
+          set -euo pipefail
+          code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+            -o /tmp/probe-body \
+            -w '%{http_code}' \
+            "$TICKET_ENDPOINT")"
+          content_type="$(curl --silent --show-error --head --proto '=https' --tlsv1.2 \
+            "$TICKET_ENDPOINT" | awk 'BEGIN{IGNORECASE=1} /^content-type:/{gsub("\r",""); print $2; exit}')"
+          bytes="$(wc -c < /tmp/probe-body | tr -d ' ')"
+          printf 'ticket_endpoint_probe http=%s content_type=%s bytes=%s\n' "$code" "${content_type:-none}" "$bytes"
+          rm -f /tmp/probe-body
+
       - name: Exchange GitHub OIDC for encrypted courier ticket
         env:
           TICKET_ENDPOINT: https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/__control/artifact-courier-ticket
