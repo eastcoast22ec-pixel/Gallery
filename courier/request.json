@@ -1,10 +1,1 @@
-{
-  "schema_version": 1,
-  "session_id": "578d7ec90bad6a4e6a0febf3e0c2b99b",
-  "request_nonce": "4b79230f8a7d8d580482eadc290d16e5",
-  "recipient_public_key_b64": "zvx0vlWg8TPP-YV0JCc492uyckYi_qNtLiVw2bCSiC4",
-  "source_sha": "7dff115f5c4d07a1e60ca0d7184aa886de0fd2f7",
-  "job_number": 905,
-  "artifact_path": "AADL-QuickPay-v0.3.16-stable/AADL-QuickPay-v0.3.16-stable.apk",
-  "expected_size": 2749914
-}
+{"schema_version":1,"session_id":"0bb1c09a4d43ddc9bdad4dd72073f2bb","request_nonce":"28f30c8c06e4c3b9f3a84f92fc8c4542","recipient_public_key_b64":"bm43GqLOM_olL-J5x7epKJ4kw23w66pBcxi4IiPrXiI","source_sha":"7dff115f5c4d07a1e60ca0d7184aa886de0fd2f7","job_number":905,"artifact_path":"AADL-QuickPay-v0.3.16-stable/AADL-QuickPay-v0.3.16-stable.apk","expected_size":2749914}
