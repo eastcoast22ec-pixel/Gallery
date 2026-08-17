@@ -1,0 +1,90 @@
+name: AADL v0.3.17 artifact list recovery
+
+on:
+  push:
+    branches: [aadl-v0317-artifact-list-recovery]
+    paths:
+      - ".github/workflows/aadl-v0317-artifact-list-recovery.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read CircleCI 1066 artifact paths through existing control plane
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          CONTROL_SOURCE='https://raw.githubusercontent.com/eastcoast22ec-pixel/mirage-pub-cloud-runner/62b83568ddabbde1811b2e1a5c85e3120945eeb4/mp_zr_cloudflare/realtime/control-request.json'
+          ORIGIN='https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev'
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 "$CONTROL_SOURCE" -o /tmp/control.json
+          python3 - <<'PY'
+          import json, pathlib
+          value=json.load(open('/tmp/control.json', encoding='utf-8'))
+          token=str(value.get('result_token',''))
+          req=value.get('request') or {}
+          assert len(token)==64 and all(c in '0123456789abcdef' for c in token)
+          assert req.get('command')=='circleci-artifacts'
+          assert req.get('parameters')=={'job_number':1066}
+          pathlib.Path('/tmp/token').write_text(token, encoding='utf-8')
+          PY
+          token="$(cat /tmp/token)"
+          kick_code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+            -X POST -H "X-MP-Control-Token: $token" \
+            -o /tmp/kick.json -w '%{http_code}' "$ORIGIN/__control/kick")"
+          case "$kick_code" in 200|202|502) ;; *) echo "kick_http=$kick_code"; exit 1;; esac
+          result_code=000
+          for _ in 1 2 3 4 5 6; do
+            result_code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+              -o /tmp/result.json -w '%{http_code}' "$ORIGIN/__control/result/$token")"
+            [ "$result_code" = 200 ] && break
+            sleep 2
+          done
+          [ "$result_code" = 200 ] || { echo "result_http=$result_code"; exit 1; }
+          python3 - <<'PY'
+          import json
+          value=json.load(open('/tmp/result.json', encoding='utf-8'))
+          def find_artifacts(x):
+              if isinstance(x, dict):
+                  a=x.get('artifacts')
+                  if isinstance(a, list): return a
+                  for v in x.values():
+                      r=find_artifacts(v)
+                      if r is not None: return r
+              elif isinstance(x, list):
+                  for v in x:
+                      r=find_artifacts(v)
+                      if r is not None: return r
+              return None
+          artifacts=find_artifacts(value) or []
+          safe=[]
+          for item in artifacts:
+              if isinstance(item, dict):
+                  p=item.get('path')
+                  if isinstance(p,str) and p:
+                      safe.append({'path':p,'node_index':item.get('node_index') if isinstance(item.get('node_index'),int) else None})
+          out={
+            'schema_version':1,
+            'ok':value.get('ok') is True,
+            'status':str(value.get('status') or ''),
+            'backend_status':value.get('backend_status') if isinstance(value.get('backend_status'),int) else None,
+            'job_number':1066,
+            'artifact_count':len(safe),
+            'artifacts':safe,
+            'secrets_exposed':False
+          }
+          json.dump(out, open('/tmp/aadl-1066-artifacts.json','w',encoding='utf-8'), separators=(',',':'))
+          print(json.dumps({'artifact_count':len(safe),'ok':out['ok'],'status':out['status']}))
+          PY
+          rm -f /tmp/token /tmp/control.json /tmp/result.json /tmp/kick.json
+      - name: Upload sanitized short-lived result
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: aadl-1066-artifact-paths
+          path: /tmp/aadl-1066-artifacts.json
+          if-no-files-found: error
+          retention-days: 1
