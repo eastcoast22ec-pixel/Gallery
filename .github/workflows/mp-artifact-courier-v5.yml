@@ -69,27 +69,11 @@ jobs:
             -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
             "$oidc_url" -o /tmp/oidc.json
           OIDC_TOKEN="$(python3 -c 'import json; print(json.load(open("/tmp/oidc.json"))["value"])')"
-          http_code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
             -H "Authorization: Bearer ${OIDC_TOKEN}" \
             -H 'Content-Type: application/json' \
             --data-binary @/tmp/binding.json \
-            -o /tmp/ticket-response.json \
-            -w '%{http_code}' \
-            "$TICKET_ENDPOINT")"
-          if [ "$http_code" != "200" ]; then
-            error_code="$(python3 - <<'PY'
-          import json, re
-          try:
-              value = str(json.load(open('/tmp/ticket-response.json', encoding='utf-8')).get('error', 'unknown'))
-          except Exception:
-              value = 'non_json_response'
-          print(value if re.fullmatch(r'[A-Za-z0-9_.-]{1,120}', value) else 'redacted_error')
-          PY
-            )"
-            printf 'ticket_exchange_rejected http=%s error=%s\n' "$http_code" "$error_code"
-            rm -f /tmp/oidc.json /tmp/ticket-response.json
-            exit 1
-          fi
+            "$TICKET_ENDPOINT" -o /tmp/ticket-response.json
           python3 - <<'PY'
           import json
           data = json.load(open('/tmp/ticket-response.json', encoding='utf-8'))
