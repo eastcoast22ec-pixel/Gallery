@@ -43,7 +43,7 @@ jobs:
 
       - name: Probe ticket endpoint safely
         env:
-          TICKET_ENDPOINT: https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/__control/artifact-courier-ticket
+          TICKET_ENDPOINT: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/__control/artifact-courier-ticket
         run: |
           set -euo pipefail
           code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
@@ -58,7 +58,7 @@ jobs:
 
       - name: Exchange GitHub OIDC for encrypted courier ticket
         env:
-          TICKET_ENDPOINT: https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/__control/artifact-courier-ticket
+          TICKET_ENDPOINT: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/__control/artifact-courier-ticket
         run: |
           set -euo pipefail
           umask 077
