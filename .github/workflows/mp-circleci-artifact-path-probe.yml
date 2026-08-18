@@ -1,0 +1,77 @@
+name: MP CircleCI Artifact Path Probe
+
+on:
+  push:
+    branches:
+      - mp-artifact-courier-v5
+    paths:
+      - artifact-path-probe/request.json
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read exact CircleCI artifact paths through existing control lane
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          CONTROL_ORIGIN: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev
+          SOURCE_REPO: eastcoast22ec-pixel/mirage-pub-cloud-runner
+          SOURCE_REF: mp-export-zr-connector
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          gh_headers=(-H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
+          curl --fail --silent --show-error "${gh_headers[@]}" \
+            "https://api.github.com/repos/${SOURCE_REPO}/contents/mp_zr_cloudflare/realtime/control-request.json?ref=${SOURCE_REF}" \
+            -o /tmp/control-outer.json
+          python3 - <<'PY'
+          import base64,json,re
+          outer=json.load(open('/tmp/control-outer.json'))
+          env=json.loads(base64.b64decode(outer['content']).decode())
+          token=str(env.get('result_token','')).strip().lower()
+          req=env.get('request') or {}
+          if not re.fullmatch(r'[0-9a-f]{64}',token): raise SystemExit('invalid control token')
+          if req.get('command')!='circleci-artifacts' or (req.get('parameters') or {}).get('job_number')!=1205: raise SystemExit('unexpected control request')
+          json.dump(env,open('/tmp/control-envelope.json','w'),separators=(',',':'))
+          open('/tmp/token','w').write(token)
+          PY
+          token="$(cat /tmp/token)"
+          curl --fail --silent --show-error --request POST \
+            -H "X-MP-Control-Token: ${token}" -H 'Content-Type: application/json' \
+            --data-binary @/tmp/control-envelope.json \
+            "${CONTROL_ORIGIN}/__control/kick" -o /tmp/kick.json
+          curl --fail --silent --show-error \
+            "${CONTROL_ORIGIN}/__control/result/${token}" -o /tmp/result.json
+          python3 - <<'PY'
+          import json,re
+          data=json.load(open('/tmp/result.json'))
+          details=(data.get('result') or {}).get('details') or {}
+          arts=details.get('artifacts') or []
+          clean=[]
+          for a in arts:
+              if not isinstance(a,dict): continue
+              p=str(a.get('path') or '')
+              n=a.get('node_index')
+              if p and len(p)<=512 and '\\' not in p and '\x00' not in p:
+                  clean.append({'path':p,'node_index':n if isinstance(n,int) else None})
+          out={'schema_version':1,'job_number':1205,'artifact_count':len(clean),'artifacts':clean,'status':str(data.get('status') or '')[:80]}
+          json.dump(out,open('/tmp/sanitized.json','w'),separators=(',',':'))
+          PY
+          encoded="$(base64 -w0 /tmp/sanitized.json)"
+          api="https://api.github.com/repos/${REPO}/contents/artifact-path-probe/result.json"
+          existing_sha="$(curl --silent --show-error "${gh_headers[@]}" "${api}?ref=${REF_NAME}" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha",""))' 2>/dev/null || true)"
+          ENCODED="$encoded" EXISTING_SHA="$existing_sha" REF_NAME="$REF_NAME" python3 - <<'PY'
+          import json,os
+          p={'message':'probe: publish sanitized CircleCI artifact paths','content':os.environ['ENCODED'],'branch':os.environ['REF_NAME']}
+          if os.environ.get('EXISTING_SHA'): p['sha']=os.environ['EXISTING_SHA']
+          json.dump(p,open('/tmp/put.json','w'),separators=(',',':'))
+          PY
+          curl --fail --silent --show-error -X PUT "${gh_headers[@]}" -H 'Content-Type: application/json' --data-binary @/tmp/put.json "$api" >/dev/null
+          rm -f /tmp/control-outer.json /tmp/control-envelope.json /tmp/token /tmp/kick.json /tmp/result.json
