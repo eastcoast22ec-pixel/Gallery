@@ -1,1 +1,1 @@
-{"schema_version":1,"target_sha":"afcad5c0b44dbfcca7bcc52a7613f49f66d89e55","courier_run_id":32194337098,"courier_status":"completed","courier_conclusion":"failure","artifact_id":null,"artifact_name":null,"artifact_size_bytes":null,"locator_run_id":32194639268}
+{"schema_version":1,"target_sha":"9faa63cecc1d6762568d1af82cc1d13da6f5e675","courier_run_id":32194956094,"courier_status":"completed","courier_conclusion":"success","artifact_id":9345512984,"artifact_name":"mp-artifact-courier-32194956094","artifact_size_bytes":674143,"locator_run_id":32194969099}
