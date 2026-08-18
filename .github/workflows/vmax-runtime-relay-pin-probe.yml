@@ -1,0 +1,86 @@
+name: VMAX Runtime Relay Pin Probe
+
+on:
+  push:
+    branches:
+      - mp-artifact-courier-v5
+    paths:
+      - .github/workflows/vmax-runtime-relay-pin-probe.yml
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read live PWA revision and ingress route
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          START_SHA: ${{ github.sha }}
+          EXPECTED_REVISION: vmax-relay-pin-v2-7a855ee
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          attempts=0
+          matched=false
+          pwa_http=000
+          live_revision=""
+          for attempt in $(seq 1 18); do
+            attempts="$attempt"
+            pwa_http="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+              -o /tmp/health.json -w '%{http_code}' \
+              https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/healthz || true)"
+            live_revision="$(python3 - <<'PY'
+          import json
+          try:
+              d=json.load(open('/tmp/health.json',encoding='utf-8'))
+              print(str(d.get('control_revision') or ''))
+          except Exception:
+              print('')
+          PY
+          )"
+            if [ "$pwa_http" = "200" ] && [ "$live_revision" = "$EXPECTED_REVISION" ]; then
+              matched=true
+              break
+            fi
+            sleep 5
+          done
+
+          ingress_http="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+            -o /tmp/ingress.json -w '%{http_code}' \
+            https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/__control/artifact-direct-ticket || true)"
+
+          MATCHED="$matched" PWA_HTTP="$pwa_http" LIVE_REVISION="$live_revision" INGRESS_HTTP="$ingress_http" ATTEMPTS="$attempts" START_SHA="$START_SHA" EXPECTED_REVISION="$EXPECTED_REVISION" python3 - <<'PY'
+          import json,os
+          result={
+              'schema_version':1,
+              'probe_source_sha':os.environ['START_SHA'].lower(),
+              'expected_revision':os.environ['EXPECTED_REVISION'],
+              'live_revision':os.environ.get('LIVE_REVISION') or None,
+              'pwa_http':int(os.environ['PWA_HTTP']) if os.environ.get('PWA_HTTP','').isdigit() else None,
+              'ingress_direct_ticket_http':int(os.environ['INGRESS_HTTP']) if os.environ.get('INGRESS_HTTP','').isdigit() else None,
+              'attempts':int(os.environ['ATTEMPTS']),
+              'status':'success' if os.environ.get('MATCHED')=='true' and os.environ.get('INGRESS_HTTP')=='405' else 'not_ready',
+          }
+          json.dump(result,open('/tmp/result.json','w'),separators=(',',':'))
+          PY
+
+          api="https://api.github.com/repos/${REPO}"
+          headers=(-H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
+          current="$(curl --fail --silent --show-error "${headers[@]}" "${api}/branches/${REF_NAME}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"]["sha"])')"
+          [ "$current" = "$START_SHA" ] || { echo '::error::Branch moved during runtime probe; fail closed'; exit 40; }
+          encoded="$(base64 -w0 /tmp/result.json)"
+          result_api="${api}/contents/runtime-probe/result.json"
+          existing="$(curl --silent --show-error "${headers[@]}" "${result_api}?ref=${REF_NAME}" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          ENCODED="$encoded" EXISTING="$existing" REF_NAME="$REF_NAME" python3 - <<'PY'
+          import json,os
+          p={'message':'probe(vmax): publish live generalized relay pin state','content':os.environ['ENCODED'],'branch':os.environ['REF_NAME']}
+          if os.environ.get('EXISTING','').strip(): p['sha']=os.environ['EXISTING'].strip()
+          json.dump(p,open('/tmp/put.json','w'),separators=(',',':'))
+          PY
+          curl --fail --silent --show-error -X PUT "${headers[@]}" -H 'Content-Type: application/json' --data-binary @/tmp/put.json "$result_api" >/dev/null
