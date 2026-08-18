@@ -5,17 +5,17 @@ Last verified: 2026-08-18 (Algeria)
 Repository: `eastcoast22ec-pixel/Gallery`
 Branch: `mp-artifact-courier-v5`
 Policy: `GLOBAL_ARTIFACT_DELIVERY_VMAX.md`
-Status: **GLOBAL STANDARD v1 ADOPTED / VERIFIED RELAY-FIRST**
+Status: **GLOBAL STANDARD v1 ADOPTED / VERIFIED RELAY-FIRST / UNIVERSAL TRANSFER RULE ACTIVE**
 
 ## Current source of truth
 
-Global policy commit before this checkpoint write:
-`a8abb1e426c5dc92077c6565f98eb34ba25ca49d`
+Global policy commit:
+`f393e3541b3bf540fed85dbda10f0c7d968deac0`
 
 CircleCI implementation:
 - Repository: `eastcoast22ec-pixel/mirage-pub-cloud-runner`
 - Production branch: `mp-export-zr-connector`
-- Verified HEAD: `2a30a0ba43d1220c514e2f62967cf96b919a1c48`
+- Verified baseline HEAD: `2a30a0ba43d1220c514e2f62967cf96b919a1c48`
 - Production CI: Job `1261` SUCCESS; Job `1262` SUCCESS.
 - Isolated Zero-Copy transport gate: Job `1260` SUCCESS.
 
@@ -25,6 +25,9 @@ Provider-native first:
 - GitHub Actions -> direct GitHub Connector download -> local integrity verification -> `/mnt/data` -> attachment.
 - CircleCI -> central Auto-Discovery -> optional Zero-Copy attempt -> verified Relay default/fallback.
 - Future providers -> thin adapter only if necessary.
+
+Universal transfer decision rule is now mandatory for all similar transfer work:
+`inspect destination -> reuse already-present bytes -> provider-native transfer -> existing Relay/Courier -> ChatGPT verified bridge -> GitHub content-addressed API -> bounded isolated CI transfer -> temporary adapter -> minimal manual action only as final fallback`.
 
 ## Completed
 
@@ -39,6 +42,10 @@ Provider-native first:
 - Zero-Copy control transport mismatch corrected and tested.
 - Bounded live retry after the fix still selected Relay, so no further complexity was added.
 - Global policy frozen as verified Relay-first Global Standard v1.
+- Universal transfer decision rule adopted for repository-to-repository, CI-to-ChatGPT, provider-to-provider, staging materialization, and generic artifact/source-tree movement.
+- Duplicate-work guard adopted: inspect destination and prior artifacts before any new transfer attempt; reuse verified bytes instead of rebuilding/re-exporting.
+- Integrity chain adopted: bind source repository/provider, ref, commit/tree, run/job/artifact identity, size/digest, local SHA-256, and target identity whenever available.
+- ZR extraction immediately reused this rule: existing target metadata was preserved and only the two missing application subtrees remain to be materialized.
 
 ## CircleCI Auto-Discovery proof — MP Android Agent
 
@@ -102,10 +109,13 @@ Production source rollback targets:
 2. Keep Zero-Copy experimental until it succeeds end-to-end on two distinct projects.
 3. Do not remove Relay until a stronger replacement is independently proven.
 4. Do not add infrastructure solely to force Zero-Copy.
+5. Extend artifact-type allowlists only for a real transfer need and only when reusing the verified lane is smaller and safer than creating a separate transport.
 
 ## Next action
 
-Normal operation is now the priority. The global command may be used as:
-`أرسل آخر APK` -> infer project -> detect provider -> auto-discover latest successful artifact -> deliver through the verified provider-native/Relay path -> verify SHA-256 -> attach.
+Normal operation is now the priority. The global transfer rule applies automatically to future transfer problems.
+
+For artifact delivery:
+`infer context -> inspect destination/prior successful artifacts -> provider-native retrieval -> existing verified Relay/Courier if needed -> verify SHA-256 -> materialize target -> read back target identity`.
 
 Future development should fetch current HEAD/provider state first, read `GLOBAL_ARTIFACT_DELIVERY_VMAX.md` + this checkpoint, reconcile, and continue only from a still-valid non-blocking gate.
