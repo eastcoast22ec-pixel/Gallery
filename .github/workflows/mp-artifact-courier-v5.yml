@@ -43,9 +43,9 @@ jobs:
           open('/tmp/audience.txt','w',encoding='utf-8').write(audience)
           PY
 
-      - name: Exchange GitHub OIDC for one-time artifact grant
+      - name: Exchange GitHub OIDC for zero-copy handoff or relay grant
         env:
-          DIRECT_ENDPOINT: https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/__control/artifact-direct-ticket
+          DIRECT_ENDPOINT: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/__control/artifact-direct-ticket
         run: |
           set -euo pipefail
           umask 077
@@ -76,24 +76,52 @@ jobs:
           python3 - <<'PY'
           import json,re
           data=json.load(open('/tmp/direct-response.json',encoding='utf-8'))
-          grant=data.get('direct_artifact') or {}
-          path=str(grant.get('download_path',''))
-          name=str(grant.get('filename',''))
-          if data.get('schema_version')!=1 or not re.fullmatch(r'/__control/artifact/[0-9a-f]{64}',path): raise SystemExit('invalid direct grant')
-          if not re.fullmatch(r'[A-Za-z0-9._-]{1,180}',name): raise SystemExit('invalid artifact filename')
-          json.dump({'download_path':path,'filename':name},open('/tmp/grant.json','w'),separators=(',',':'))
+          if data.get('schema_version') != 1: raise SystemExit('invalid direct response schema')
+          handoff=data.get('signed_handoff') or {}
+          handoff_path=str(handoff.get('handoff_path','')).strip()
+          handoff_name=str(handoff.get('filename','')).strip()
+          handoff_sha=str(handoff.get('sha256','')).strip().lower()
+          if handoff_path:
+              if not re.fullmatch(r'/__control/artifact-handoff/[0-9a-f]{64}',handoff_path): raise SystemExit('invalid handoff path')
+              if not re.fullmatch(r'[A-Za-z0-9._-]{1,180}',handoff_name): raise SystemExit('invalid handoff filename')
+              if not re.fullmatch(r'[0-9a-f]{64}',handoff_sha): raise SystemExit('invalid handoff sha256')
+              json.dump({
+                  'schema_version':1,
+                  'mode':'zero-copy',
+                  'handoff_path':handoff_path,
+                  'filename':handoff_name,
+                  'sha256':handoff_sha,
+                  'job_number':handoff.get('job_number'),
+                  'artifact_path':handoff.get('artifact_path'),
+                  'expires_in_seconds':handoff.get('expires_in_seconds')
+              },open('/tmp/handoff.json','w'),separators=(',',':'))
+              open('/tmp/delivery-mode','w').write('zero-copy')
+          else:
+              grant=data.get('direct_artifact') or {}
+              path=str(grant.get('download_path','')).strip()
+              name=str(grant.get('filename','')).strip()
+              if not re.fullmatch(r'/__control/artifact/[0-9a-f]{64}',path): raise SystemExit('invalid direct grant')
+              if not re.fullmatch(r'[A-Za-z0-9._-]{1,180}',name): raise SystemExit('invalid artifact filename')
+              json.dump({'download_path':path,'filename':name},open('/tmp/grant.json','w'),separators=(',',':'))
+              open('/tmp/delivery-mode','w').write('relay')
           PY
           rm -f /tmp/oidc.json /tmp/direct-response.json /tmp/binding.json /tmp/audience.txt
 
-      - name: Download verified CircleCI artifact through one-time grant
+      - name: Download CircleCI artifact only when zero-copy is unavailable
         env:
-          PWA_ORIGIN: https://mp-zr-express-pwa.eastcoast22-ec.workers.dev
+          CONTROL_ORIGIN: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev
         run: |
           set -euo pipefail
           umask 077
+          mode="$(cat /tmp/delivery-mode)"
+          if [ "$mode" = "zero-copy" ]; then
+            echo 'zero_copy_handoff=ready; binary relay skipped'
+            rm -f /tmp/request-source.json
+            exit 0
+          fi
           download_path="$(python3 -c 'import json; print(json.load(open("/tmp/grant.json"))["download_path"])')"
           filename="$(python3 -c 'import json; print(json.load(open("/tmp/grant.json"))["filename"])')"
-          download_url="${PWA_ORIGIN}${download_path}/${filename}"
+          download_url="${CONTROL_ORIGIN}${download_path}/${filename}"
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --retry 1 --retry-delay 1 \
             "$download_url" -o "/tmp/${filename}"
@@ -104,16 +132,17 @@ jobs:
           if not os.path.isfile(path) or os.path.getsize(path)<1024: raise SystemExit('artifact missing or too small')
           if name.lower().endswith('.apk') and not zipfile.is_zipfile(path): raise SystemExit('invalid apk container')
           sha=hashlib.sha256(open(path,'rb').read()).hexdigest()
-          json.dump({'schema_version':1,'filename':name,'size_bytes':os.path.getsize(path),'sha256':sha},open('/tmp/artifact-meta.json','w'),separators=(',',':'))
+          json.dump({'schema_version':1,'mode':'relay','filename':name,'size_bytes':os.path.getsize(path),'sha256':sha},open('/tmp/artifact-meta.json','w'),separators=(',',':'))
           print(f"artifact_ready filename={name} size={os.path.getsize(path)} sha256={sha}")
           PY
           rm -f /tmp/grant.json /tmp/request-source.json
 
-      - name: Upload ChatGPT-delivery artifact
+      - name: Upload ChatGPT delivery metadata or fallback APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mp-artifact-courier-${{ github.run_id }}
           path: |
+            /tmp/handoff.json
             /tmp/*.apk
             /tmp/artifact-meta.json
           if-no-files-found: error
