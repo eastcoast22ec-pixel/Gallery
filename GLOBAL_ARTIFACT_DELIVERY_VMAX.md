@@ -73,8 +73,9 @@ Never rebuild solely to move an artifact that already exists.
 CircleCI Auto-Discovery source of truth:
 - Repository: `eastcoast22ec-pixel/mirage-pub-cloud-runner`
 - Production branch: `mp-export-zr-connector`
-- Verified implementation HEAD: `39d5a381b944131c8f6f856b0dddbcf86088e6dc`
-- Production CI: `zr-python-ci` Job `1258` SUCCESS; `zr-cloudflare-ci` Job `1259` SUCCESS.
+- Verified implementation HEAD: `2a30a0ba43d1220c514e2f62967cf96b919a1c48`
+- Production CI: `zr-python-ci` Job `1261` SUCCESS; `zr-cloudflare-ci` Job `1262` SUCCESS.
+- Zero-Copy control transport staging gate: Job `1260` SUCCESS.
 
 Current CircleCI profiles:
 - `aadl` / `quickpay` / `aadl-quickpay`
@@ -106,6 +107,19 @@ Request contained no real Job number/path:
 - Delivery mode: `relay`
 - New Android build triggered: NO
 
+## Zero-Copy status
+
+A confirmed transport mismatch was corrected: production uses `CIRCLECI_CONTROL_TRANSPORT=render-relay`, so Zero-Copy control/API reads now use that configured transport while CircleCI artifact-host fetches remain direct.
+
+Validation:
+- isolated staging CI Job `1260`: SUCCESS
+- production CI Jobs `1261` / `1262`: SUCCESS
+- bounded live MP Agent retry: Courier run `32096595250`, Artifact ID `9310138435`
+- resulting APK size/hash/container still verified exactly
+- resulting delivery mode: `relay`
+
+Decision: **do not add further infrastructure or complexity solely to force Zero-Copy now**. Relay is already reliable, verified, free-tier compatible, and fully automatic. Zero-Copy stays a non-blocking experimental optimization until a future provider/runtime signal gives a clear, low-complexity path to prove it.
+
 ## Verified GitHub Actions independent-repository proof
 
 - Repository: `eastcoast22ec-pixel/Gallery`
@@ -124,14 +138,19 @@ Request contained no real Job number/path:
 
 ## Recovery / LAST_KNOWN_GOOD
 
-CircleCI Relay is the permanent recovery path until a stronger path is independently proven.
+CircleCI Relay is the permanent recovery/default delivery path until a stronger path is independently proven.
 
-Original proven relay evidence:
-- Courier run: `32092943050`
-- Artifact ID: `9308946221`
+Latest verified automatic relay proof:
+- Courier run: `32096595250`
+- Artifact ID: `9310138435`
 - APK: `MP-Android-Agent-v0.1.0-debug.apk`
 - Size: `886128` bytes
 - SHA-256: `e0cb767760bcc07413f926889cf143b2c44b83bae878943fb044f6530d00fd38`
+- APK container: PASS
+
+Original proven relay evidence remains historical LKG evidence:
+- Courier run: `32092943050`
+- Artifact ID: `9308946221`
 
 ## Global adoption gates
 
@@ -161,7 +180,7 @@ When the user says **"أرسل آخر APK"**:
 4. Use an existing successful artifact; never trigger a build merely for transfer.
 5. Discover exact artifact identity/path automatically.
 6. Download, verify integrity, place in `/mnt/data`, and attach.
-7. If CircleCI Zero-Copy is unavailable or uncertain, use Relay automatically without user intervention.
+7. CircleCI uses the verified Relay automatically; Zero-Copy may be attempted only as a safe optimization and must never block delivery.
 
 ## Complexity guard
 
