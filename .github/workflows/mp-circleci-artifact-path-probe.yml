@@ -20,6 +20,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           REF_NAME: ${{ github.ref_name }}
+          REQUEST_SHA: ${{ github.sha }}
           CONTROL_ORIGIN: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev
           SOURCE_REPO: eastcoast22ec-pixel/mirage-pub-cloud-runner
           SOURCE_REF: mp-export-zr-connector
@@ -28,17 +29,32 @@ jobs:
           set -euo pipefail
           umask 077
           gh_headers=(-H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
+
+          curl --fail --silent --show-error "${gh_headers[@]}" \
+            "https://api.github.com/repos/${REPO}/contents/artifact-path-probe/request.json?ref=${REQUEST_SHA}" \
+            -o /tmp/probe-request-outer.json
+          python3 - <<'PY'
+          import base64,json
+          outer=json.load(open('/tmp/probe-request-outer.json'))
+          req=json.loads(base64.b64decode(outer['content']).decode())
+          if set(req)!={'schema_version','job_number'} or req.get('schema_version')!=1: raise SystemExit('invalid probe request')
+          job=req.get('job_number')
+          if isinstance(job,bool) or not isinstance(job,int) or job<1: raise SystemExit('invalid job number')
+          open('/tmp/job-number','w').write(str(job))
+          PY
+
           curl --fail --silent --show-error "${gh_headers[@]}" \
             "https://api.github.com/repos/${SOURCE_REPO}/contents/mp_zr_cloudflare/realtime/control-request.json?ref=${SOURCE_REF}" \
             -o /tmp/control-outer.json
-          python3 - <<'PY'
-          import base64,json,re
+          JOB_NUMBER="$(cat /tmp/job-number)" python3 - <<'PY'
+          import base64,json,os,re
+          wanted=int(os.environ['JOB_NUMBER'])
           outer=json.load(open('/tmp/control-outer.json'))
           env=json.loads(base64.b64decode(outer['content']).decode())
           token=str(env.get('result_token','')).strip().lower()
           req=env.get('request') or {}
           if not re.fullmatch(r'[0-9a-f]{64}',token): raise SystemExit('invalid control token')
-          if req.get('command')!='circleci-artifacts' or (req.get('parameters') or {}).get('job_number')!=1205: raise SystemExit('unexpected control request')
+          if req.get('command')!='circleci-artifacts' or (req.get('parameters') or {}).get('job_number')!=wanted: raise SystemExit('unexpected control request')
           json.dump(env,open('/tmp/control-envelope.json','w'),separators=(',',':'))
           open('/tmp/token','w').write(token)
           PY
@@ -49,8 +65,8 @@ jobs:
             "${CONTROL_ORIGIN}/__control/kick" -o /tmp/kick.json
           curl --fail --silent --show-error \
             "${CONTROL_ORIGIN}/__control/result/${token}" -o /tmp/result.json
-          python3 - <<'PY'
-          import json,re
+          JOB_NUMBER="$(cat /tmp/job-number)" python3 - <<'PY'
+          import json,os
           data=json.load(open('/tmp/result.json'))
           details=(data.get('result') or {}).get('details') or {}
           arts=details.get('artifacts') or []
@@ -61,7 +77,7 @@ jobs:
               n=a.get('node_index')
               if p and len(p)<=512 and '\\' not in p and '\x00' not in p:
                   clean.append({'path':p,'node_index':n if isinstance(n,int) else None})
-          out={'schema_version':1,'job_number':1205,'artifact_count':len(clean),'artifacts':clean,'status':str(data.get('status') or '')[:80]}
+          out={'schema_version':1,'job_number':int(os.environ['JOB_NUMBER']),'artifact_count':len(clean),'artifacts':clean,'status':str(data.get('status') or '')[:80]}
           json.dump(out,open('/tmp/sanitized.json','w'),separators=(',',':'))
           PY
           encoded="$(base64 -w0 /tmp/sanitized.json)"
@@ -74,4 +90,4 @@ jobs:
           json.dump(p,open('/tmp/put.json','w'),separators=(',',':'))
           PY
           curl --fail --silent --show-error -X PUT "${gh_headers[@]}" -H 'Content-Type: application/json' --data-binary @/tmp/put.json "$api" >/dev/null
-          rm -f /tmp/control-outer.json /tmp/control-envelope.json /tmp/token /tmp/kick.json /tmp/result.json
+          rm -f /tmp/probe-request-outer.json /tmp/control-outer.json /tmp/control-envelope.json /tmp/token /tmp/kick.json /tmp/result.json /tmp/job-number
