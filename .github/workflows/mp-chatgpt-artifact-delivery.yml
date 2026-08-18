@@ -1,0 +1,198 @@
+name: MP ChatGPT Artifact Delivery
+
+on:
+  push:
+    branches:
+      - mp-artifact-courier-v5
+    paths:
+      - delivery/request.json
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: mp-chatgpt-artifact-delivery
+  cancel-in-progress: false
+
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Resolve courier artifact and materialize APK
+        id: materialize
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REQUEST_SHA: ${{ github.sha }}
+          CONTROL_ORIGIN: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          api="https://api.github.com/repos/${REPO}"
+          headers=(-H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
+
+          curl --fail --silent --show-error "${headers[@]}" \
+            "${api}/contents/delivery/request.json?ref=${REQUEST_SHA}" > /tmp/request-outer.json
+          python3 - <<'PY'
+          import base64, json, re
+          outer=json.load(open('/tmp/request-outer.json'))
+          req=json.loads(base64.b64decode(outer['content']).decode())
+          if set(req) != {'schema_version','target_sha'} or req.get('schema_version') != 1:
+              raise SystemExit('invalid delivery request schema')
+          sha=str(req.get('target_sha','')).lower()
+          if not re.fullmatch(r'[0-9a-f]{40}', sha): raise SystemExit('invalid target_sha')
+          open('/tmp/target_sha','w').write(sha)
+          PY
+
+          for attempt in $(seq 1 50); do
+            curl --fail --silent --show-error "${headers[@]}" \
+              "${api}/actions/workflows/mp-artifact-courier-v5.yml/runs?branch=mp-artifact-courier-v5&event=push&per_page=30" > /tmp/runs.json
+            python3 - <<'PY'
+          import json
+          target=open('/tmp/target_sha').read().strip()
+          runs=json.load(open('/tmp/runs.json')).get('workflow_runs',[])
+          match=next((r for r in runs if str(r.get('head_sha','')).lower()==target), None)
+          json.dump({
+              'run_id': match.get('id') if match else None,
+              'status': match.get('status') if match else None,
+              'conclusion': match.get('conclusion') if match else None,
+          }, open('/tmp/courier-run.json','w'), separators=(',',':'))
+          PY
+            run_id="$(python3 -c 'import json; print(json.load(open("/tmp/courier-run.json")).get("run_id") or "")')"
+            status="$(python3 -c 'import json; print(json.load(open("/tmp/courier-run.json")).get("status") or "")')"
+            conclusion="$(python3 -c 'import json; print(json.load(open("/tmp/courier-run.json")).get("conclusion") or "")')"
+            if [ -n "$run_id" ] && [ "$status" = "completed" ]; then
+              [ "$conclusion" = "success" ] || { echo "courier failed: $conclusion"; exit 20; }
+              break
+            fi
+            sleep 2
+          done
+          [ -n "${run_id:-}" ] && [ "${status:-}" = "completed" ] || { echo 'courier run timeout'; exit 21; }
+
+          curl --fail --silent --show-error "${headers[@]}" \
+            "${api}/actions/runs/${run_id}/artifacts?per_page=20" > /tmp/artifacts.json
+          artifact_id="$(python3 - <<'PY'
+          import json
+          arts=json.load(open('/tmp/artifacts.json')).get('artifacts',[])
+          matches=[a for a in arts if str(a.get('name','')).startswith('mp-artifact-courier-') and not a.get('expired')]
+          if len(matches)!=1: raise SystemExit('courier artifact count mismatch')
+          print(matches[0]['id'])
+          PY
+          )"
+          curl --fail --silent --show-error --location "${headers[@]}" \
+            "${api}/actions/artifacts/${artifact_id}/zip" -o /tmp/courier.zip
+          rm -rf /tmp/courier /tmp/delivery
+          mkdir -p /tmp/courier /tmp/delivery
+          unzip -q /tmp/courier.zip -d /tmp/courier
+
+          if [ -f /tmp/courier/handoff.json ]; then
+            python3 - <<'PY'
+          import json,re
+          h=json.load(open('/tmp/courier/handoff.json'))
+          path=str(h.get('handoff_path','')).strip()
+          name=str(h.get('filename','')).strip()
+          sha=str(h.get('sha256','')).strip().lower()
+          if not re.fullmatch(r'/__control/artifact-handoff/[0-9a-f]{64}',path): raise SystemExit('invalid handoff path')
+          if not re.fullmatch(r'[A-Za-z0-9._-]{1,180}',name): raise SystemExit('invalid filename')
+          if not re.fullmatch(r'[0-9a-f]{64}',sha): raise SystemExit('invalid sha256')
+          open('/tmp/handoff-path','w').write(path)
+          open('/tmp/final-name','w').write(name)
+          open('/tmp/expected-sha','w').write(sha)
+          open('/tmp/delivery-mode','w').write('zero-copy')
+          PY
+            handoff_path="$(cat /tmp/handoff-path)"
+            final_name="$(cat /tmp/final-name)"
+            curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+              "${CONTROL_ORIGIN}${handoff_path}" -o "/tmp/delivery/${final_name}"
+          else
+            apk="$(find /tmp/courier -maxdepth 1 -type f -name '*.apk' -print -quit)"
+            [ -n "$apk" ] || { echo 'no APK or handoff in courier artifact'; exit 22; }
+            final_name="$(basename "$apk")"
+            cp "$apk" "/tmp/delivery/${final_name}"
+            if [ -f /tmp/courier/artifact-meta.json ]; then
+              python3 - <<'PY'
+          import json,re
+          h=json.load(open('/tmp/courier/artifact-meta.json'))
+          sha=str(h.get('sha256','')).strip().lower()
+          if not re.fullmatch(r'[0-9a-f]{64}',sha): raise SystemExit('invalid relay sha256')
+          open('/tmp/expected-sha','w').write(sha)
+          PY
+            fi
+            open_mode=relay
+            printf '%s' "$open_mode" > /tmp/delivery-mode
+          fi
+
+          FINAL_NAME="$final_name" python3 - <<'PY'
+          import hashlib, os, pathlib, re, zipfile
+          name=os.environ['FINAL_NAME']
+          path=pathlib.Path('/tmp/delivery')/name
+          if not path.is_file() or path.stat().st_size < 1024: raise SystemExit('APK missing or too small')
+          if not zipfile.is_zipfile(path): raise SystemExit('invalid APK container')
+          actual=hashlib.sha256(path.read_bytes()).hexdigest()
+          expected=''
+          p=pathlib.Path('/tmp/expected-sha')
+          if p.exists(): expected=p.read_text().strip().lower()
+          if expected and actual != expected: raise SystemExit('sha256 mismatch')
+          print(f'final_name={name}')
+          print(f'final_path={path}')
+          print(f'sha256={actual}')
+          print(f'size_bytes={path.stat().st_size}')
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as out:
+              out.write(f'final_name={name}\nfinal_path={path}\nsha256={actual}\nsize_bytes={path.stat().st_size}\n')
+          PY
+
+      - name: Upload final APK for ChatGPT
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mp-chatgpt-delivery-${{ github.run_id }}
+          path: ${{ steps.materialize.outputs.final_path }}
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Publish sanitized delivery result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          TARGET_SHA: ${{ github.event.before }}
+          FINAL_NAME: ${{ steps.materialize.outputs.final_name }}
+          FINAL_SHA: ${{ steps.materialize.outputs.sha256 }}
+          FINAL_SIZE: ${{ steps.materialize.outputs.size_bytes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${REPO}"
+          headers=(-H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
+          courier_target="$(cat /tmp/target_sha)"
+          python3 - <<'PY'
+          import json, os
+          result={
+              'schema_version':1,
+              'target_sha':open('/tmp/target_sha').read().strip(),
+              'delivery_run_id':int(os.environ['GITHUB_RUN_ID']),
+              'delivery_artifact_name':'mp-chatgpt-delivery-'+os.environ['GITHUB_RUN_ID'],
+              'filename':os.environ['FINAL_NAME'],
+              'sha256':os.environ['FINAL_SHA'],
+              'size_bytes':int(os.environ['FINAL_SIZE']),
+              'status':'success',
+          }
+          json.dump(result,open('/tmp/delivery-result.json','w'),separators=(',',':'))
+          PY
+          encoded="$(base64 -w0 /tmp/delivery-result.json)"
+          existing_sha="$(curl --silent --show-error "${headers[@]}" \
+            "${api}/contents/delivery/result.json?ref=${REF_NAME}" | \
+            python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          ENCODED="$encoded" EXISTING_SHA="$existing_sha" python3 - <<'PY'
+          import json, os
+          payload={'message':'delivery: publish ChatGPT APK artifact','content':os.environ['ENCODED'],'branch':os.environ['REF_NAME']}
+          sha=os.environ.get('EXISTING_SHA','').strip()
+          if sha: payload['sha']=sha
+          json.dump(payload,open('/tmp/put.json','w'),separators=(',',':'))
+          PY
+          curl --fail --silent --show-error -X PUT "${headers[@]}" \
+            -H 'Content-Type: application/json' --data-binary @/tmp/put.json \
+            "${api}/contents/delivery/result.json" >/dev/null
