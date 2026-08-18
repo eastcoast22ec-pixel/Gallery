@@ -1,0 +1,172 @@
+name: MP Artifact Courier V5
+
+on:
+  push:
+    branches:
+      - mp-artifact-courier-v5
+    paths:
+      - courier/request.json
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  courier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Fetch and validate request
+        env:
+          REQUEST_API: https://api.github.com/repos/eastcoast22ec-pixel/Gallery/contents/courier/request.json?ref=${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+            --retry 2 --retry-delay 1 --retry-all-errors \
+            -H 'Accept: application/vnd.github.raw+json' \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "$REQUEST_API" -o /tmp/request-source.json
+          GITHUB_SHA_VALUE="$GITHUB_SHA" python3 - <<'PY'
+          import hashlib, json, os
+          src = json.load(open('/tmp/request-source.json', encoding='utf-8'))
+          required = {
+              'schema_version', 'session_id', 'request_nonce', 'recipient_public_key_b64',
+              'source_sha', 'job_number', 'artifact_path', 'expected_size'
+          }
+          if set(src) != required or src.get('schema_version') != 1:
+              raise SystemExit('invalid request schema')
+          binding = dict(src)
+          binding['courier_sha'] = os.environ['GITHUB_SHA_VALUE'].lower()
+          canonical = json.dumps(binding, sort_keys=True, separators=(',', ':'))
+          audience = 'mp-artifact-courier:v1:' + hashlib.sha256(canonical.encode()).hexdigest()
+          open('/tmp/binding.json', 'w', encoding='utf-8').write(canonical)
+          open('/tmp/audience.txt', 'w', encoding='utf-8').write(audience)
+          PY
+
+      - name: Probe ticket endpoint safely
+        env:
+          TICKET_ENDPOINT: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/__control/artifact-courier-ticket
+          PWA_HEALTH_ENDPOINT: https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/healthz
+        run: |
+          set -euo pipefail
+          code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+            -o /tmp/probe-body \
+            -w '%{http_code}' \
+            "$TICKET_ENDPOINT")"
+          content_type="$(curl --silent --show-error --head --proto '=https' --tlsv1.2 \
+            "$TICKET_ENDPOINT" | awk 'BEGIN{IGNORECASE=1} /^content-type:/{gsub("\r",""); print $2; exit}')"
+          bytes="$(wc -c < /tmp/probe-body | tr -d ' ')"
+          printf 'ticket_endpoint_probe http=%s content_type=%s bytes=%s\n' "$code" "${content_type:-none}" "$bytes"
+          rm -f /tmp/probe-body
+
+          health_code="$(curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+            -o /tmp/pwa-health.json \
+            -w '%{http_code}' \
+            "$PWA_HEALTH_ENDPOINT")"
+          HEALTH_HTTP="$health_code" python3 - <<'PY'
+          import json, os, re
+          data = json.load(open('/tmp/pwa-health.json', encoding='utf-8'))
+          status = str(data.get('status', ''))
+          component = str(data.get('component', ''))
+          revision = str(data.get('control_revision', 'missing'))
+          safe = re.compile(r'^[A-Za-z0-9_.:-]{1,120}$')
+          if not safe.fullmatch(status): status = 'redacted'
+          if not safe.fullmatch(component): component = 'redacted'
+          if not safe.fullmatch(revision): revision = 'redacted'
+          print(f"pwa_health http={os.environ['HEALTH_HTTP']} status={status} component={component} control_revision={revision}")
+          if os.environ['HEALTH_HTTP'] != '200' or status != 'ok':
+              raise SystemExit('pwa health gate failed')
+          PY
+          rm -f /tmp/pwa-health.json
+
+      - name: Exchange GitHub OIDC for encrypted courier ticket
+        env:
+          TICKET_ENDPOINT: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/__control/artifact-courier-ticket
+        run: |
+          set -euo pipefail
+          umask 077
+          audience="$(cat /tmp/audience.txt)"
+          encoded_audience="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$audience")"
+          oidc_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${encoded_audience}"
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "$oidc_url" -o /tmp/oidc.json
+          OIDC_TOKEN="$(python3 -c 'import json; print(json.load(open("/tmp/oidc.json"))["value"])')"
+          set +e
+          http_code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+            -H "Authorization: Bearer ${OIDC_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data-binary @/tmp/binding.json \
+            -o /tmp/ticket-response.json \
+            -w '%{http_code}' \
+            "$TICKET_ENDPOINT")"
+          curl_status=$?
+          set -e
+          if [ "$curl_status" -ne 0 ]; then
+            printf 'ticket_exchange_transport_error curl_status=%s http=%s\n' "$curl_status" "${http_code:-000}"
+            rm -f /tmp/oidc.json /tmp/ticket-response.json
+            exit "$curl_status"
+          fi
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            TICKET_HTTP="$http_code" python3 - <<'PY'
+          import json, os, re
+          try:
+              data = json.load(open('/tmp/ticket-response.json', encoding='utf-8'))
+              code = str(data.get('error', 'unknown'))
+          except Exception:
+              code = 'invalid_json'
+          if not re.fullmatch(r'[A-Za-z0-9_.:-]{1,120}', code):
+              code = 'redacted'
+          print(f"ticket_exchange_failed http={os.environ['TICKET_HTTP']} error={code}")
+          PY
+            rm -f /tmp/oidc.json /tmp/ticket-response.json
+            exit 22
+          fi
+          python3 - <<'PY'
+          import json
+          data = json.load(open('/tmp/ticket-response.json', encoding='utf-8'))
+          ticket = data.get('ticket', '')
+          if data.get('schema_version') != 1 or not ticket.startswith('v1.'):
+              raise SystemExit('invalid ticket response')
+          json.dump({'schema_version': 1, 'ticket': ticket}, open('/tmp/render-request.json', 'w', encoding='utf-8'), separators=(',', ':'))
+          PY
+          rm -f /tmp/oidc.json /tmp/ticket-response.json
+
+      - name: Stream blind encrypted artifact from Render
+        env:
+          RENDER_ENDPOINT: https://mp-export-zr-connector.onrender.com/v1/ops/artifact-courier
+        run: |
+          set -euo pipefail
+          umask 077
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            -H 'Content-Type: application/json' \
+            --data-binary @/tmp/render-request.json \
+            "$RENDER_ENDPOINT" -o /tmp/artifact-courier.mpac
+          test -s /tmp/artifact-courier.mpac
+          python3 - <<'PY'
+          import hashlib, json, os
+          path = '/tmp/artifact-courier.mpac'
+          sha = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+          request = json.load(open('/tmp/request-source.json', encoding='utf-8'))
+          json.dump({
+              'schema_version': 1,
+              'session_id': request['session_id'],
+              'encrypted_size': os.path.getsize(path),
+              'encrypted_sha256': sha,
+          }, open('/tmp/courier-meta.json', 'w', encoding='utf-8'), separators=(',', ':'))
+          PY
+          rm -f /tmp/render-request.json /tmp/binding.json /tmp/request-source.json /tmp/audience.txt
+
+      - name: Upload encrypted courier artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mp-artifact-courier-${{ github.run_id }}
+          path: |
+            /tmp/artifact-courier.mpac
+            /tmp/courier-meta.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
