@@ -1,0 +1,1 @@
+{"schema_version":1,"probe_source_sha":"5e898a62a47acbec6d5075d17156adcaf5753881","expected_revision":"vmax-relay-pin-v2-7a855ee","live_revision":"vmax-zero-copy-v1-3b18d57","pwa_http":200,"ingress_direct_ticket_http":405,"attempts":18,"status":"not_ready"}
