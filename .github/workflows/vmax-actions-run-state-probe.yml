@@ -22,7 +22,7 @@ jobs:
           REPO: ${{ github.repository }}
           REF_NAME: ${{ github.ref_name }}
           START_SHA: ${{ github.sha }}
-          COURIER_SHA: d655d7797e1dbed6d2ee714ca510140ec7721782
+          COURIER_SHA: 6a31c2277c244cbcaed678bd126e24e42257f3fd
         shell: bash
         run: |
           set -euo pipefail
