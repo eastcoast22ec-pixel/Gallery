@@ -1,6 +1,6 @@
 # Global Artifact Delivery VMAX v1
 
-Status: **GLOBAL STANDARD v1 ADOPTED**
+Status: **GLOBAL STANDARD v1 ADOPTED + UNIVERSAL TRANSFER RULE ACTIVE**
 
 Core law: **maximum practical power with minimum practical complexity**.
 
@@ -181,6 +181,85 @@ When the user says **"أرسل آخر APK"**:
 5. Discover exact artifact identity/path automatically.
 6. Download, verify integrity, place in `/mnt/data`, and attach.
 7. CircleCI uses the verified Relay automatically; Zero-Copy may be attempted only as a safe optimization and must never block delivery.
+
+## Universal transfer decision rule — mandatory for future transfer problems
+
+This rule applies to **all similar transfer problems**, not only APK delivery and not only CircleCI. It covers repository-to-repository transfer, CI-to-ChatGPT delivery, provider-to-provider migration, staging materialization, ZIP/JSON/PDF/APK delivery, and any future artifact or source-tree movement where exact bytes matter.
+
+### Core rule
+
+**Do not invent a new transfer architecture while an existing verified transport can carry the required bytes safely.**
+
+Always start from the latest verified source and reuse the smallest existing transport. Transfer is a data-movement problem first, not an architecture problem.
+
+### Mandatory order
+
+1. **Reuse already-materialized target content**
+   - Read target state first.
+   - Do not retransmit files/subtrees already present with matching Git blob/tree SHA or provider digest.
+   - Move only the missing delta.
+
+2. **Provider-native direct transfer**
+   - Prefer connected provider APIs/connectors and exact artifact IDs/paths.
+   - GitHub -> GitHub Connector/Data API.
+   - GitHub Actions -> direct workflow artifact download.
+   - CircleCI -> existing artifact API/Auto-Discovery.
+   - Never rebuild just to obtain a transferable copy when an existing successful artifact exists.
+
+3. **Reuse the verified Global Artifact Delivery lane**
+   - For CircleCI or similar providers, prefer the existing Auto-Discovery + Relay/Courier path.
+   - Zero-Copy is optional only; failure or incompatibility must fall back to Relay rather than cause new infrastructure.
+   - Existing Relay/Courier may carry any explicitly allowed safe artifact type; extend an allowlist only when the need is real and the change is smaller/safer than building a separate transport.
+
+4. **ChatGPT as a verified bridge when necessary**
+   - Provider artifact -> ChatGPT `/mnt/data` -> verify container/digest -> target provider/repository via connected API.
+   - This is preferred over asking the user to download/upload files manually.
+   - Preserve exact bytes and verify SHA-256 before and after the bridge.
+
+5. **Content-addressed repository transfer**
+   - When moving source trees through GitHub APIs, reuse existing target blobs/trees first.
+   - For missing objects, create blobs/trees with integrity gates and do not move the target branch ref until the complete tree is verified.
+   - Cross-repository Git object SHA reuse must never be assumed; GitHub object stores are repository-scoped unless live API proof says otherwise.
+
+6. **Existing bounded CI transfer job only if provider-native paths cannot carry the bytes**
+   - One isolated export/import job, no build/deploy/runtime mutation.
+   - Verify exact source tree/commit before packaging.
+   - Store one deterministic artifact and verify its digest.
+   - Never rerun a failed deterministic transfer job without fixing the proven cause first.
+
+7. **Temporary adapter only as last automated fallback**
+   - Must be read-only toward source and shadow-only toward target until equivalence passes.
+   - No generic proxy/database/queue/worker/agent unless the transfer cannot be solved with existing lanes.
+   - Remove temporary transfer components after success unless they have proven recurring value.
+
+8. **Manual user action is the final fallback**
+   - Only after connected tools, direct APIs, existing Relay/Courier, ChatGPT bridge, GitHub Data API, and bounded CI transfer have been exhausted.
+   - Ask for the minimum possible phone-only action.
+   - Never ask for a PC/Terminal/Opera when a connected path can solve the transfer.
+
+### Integrity gate
+
+For every transfer, bind and verify as many immutable identities as the source provides:
+
+`source repository/provider -> branch/ref -> commit/tree SHA -> build/job/run ID -> exact artifact path/ID -> size -> provider digest -> local SHA-256 -> target blob/tree/artifact identity`
+
+A transfer is not complete until the target is read back and identity/equivalence is verified. Timeout or missing status is not evidence of failure; read actual target state before retrying.
+
+### Duplicate-work guard
+
+Before every new transfer attempt:
+
+- inspect destination first;
+- inspect prior successful artifacts/jobs/runs;
+- reuse existing bytes if available;
+- do not repeat successful export/download/materialization steps;
+- do not create a second transport while the first verified transport still has a viable continuation path.
+
+### Complexity gate
+
+A new transfer component is permitted only if it clearly improves reliability, safety, speed, autonomy, maintainability, cost, or recovery **more than** the complexity and new failure modes it adds.
+
+If the answer is not clearly yes: **reuse the existing transport**.
 
 ## Complexity guard
 
