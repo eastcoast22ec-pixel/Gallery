@@ -16,12 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Probe direct endpoint redirect without credentials
+      - name: Probe ingress direct endpoint without credentials
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           REF_NAME: ${{ github.ref_name }}
-          ENDPOINT: https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/__control/artifact-direct-ticket
+          ENDPOINT: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/__control/artifact-direct-ticket
         shell: bash
         run: |
           set -euo pipefail
@@ -55,7 +55,7 @@ jobs:
           existing_sha="$(curl --silent --show-error "${headers[@]}" "${api}?ref=${REF_NAME}" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha",""))' 2>/dev/null || true)"
           ENCODED="$encoded" EXISTING_SHA="$existing_sha" REF_NAME="$REF_NAME" python3 - <<'PY'
           import json,os
-          p={'message':'probe: publish sanitized direct redirect','content':os.environ['ENCODED'],'branch':os.environ['REF_NAME']}
+          p={'message':'probe: publish sanitized ingress direct status','content':os.environ['ENCODED'],'branch':os.environ['REF_NAME']}
           if os.environ.get('EXISTING_SHA'): p['sha']=os.environ['EXISTING_SHA']
           json.dump(p,open('/tmp/put.json','w'),separators=(',',':'))
           PY
