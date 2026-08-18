@@ -1,0 +1,59 @@
+name: MP Render Route Probe
+
+on:
+  push:
+    branches:
+      - mp-artifact-courier-v5
+    paths:
+      - render-probe/request.json
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe Render health and courier route
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          HEALTH: https://mp-export-zr-connector.onrender.com/health
+          ROUTE: https://mp-export-zr-connector.onrender.com/v1/ops/artifact-courier
+        shell: bash
+        run: |
+          set -euo pipefail
+          health_code="$(curl --silent --show-error --location --max-time 45 -o /tmp/health.json -w '%{http_code}' "$HEALTH" || true)"
+          route_code="$(curl --silent --show-error --max-time 45 -o /tmp/route.txt -w '%{http_code}' "$ROUTE" || true)"
+          HEALTH_CODE="$health_code" ROUTE_CODE="$route_code" python3 - <<'PY'
+          import json, os, re
+          git_commit=None; status=None; version=None
+          try:
+              data=json.load(open('/tmp/health.json',encoding='utf-8'))
+              candidate=str(data.get('git_commit') or '').lower()
+              if re.fullmatch(r'[0-9a-f]{40}', candidate): git_commit=candidate
+              s=str(data.get('status') or '')
+              if re.fullmatch(r'[A-Za-z0-9_.:-]{1,80}', s): status=s
+              v=str(data.get('version') or '')
+              if re.fullmatch(r'[A-Za-z0-9_.:+-]{1,80}', v): version=v
+          except Exception:
+              pass
+          def code(name):
+              x=os.environ.get(name,'')
+              return int(x) if x.isdigit() else None
+          result={'schema_version':1,'health_http':code('HEALTH_CODE'),'health_status':status,'version':version,'git_commit':git_commit,'courier_route_http':code('ROUTE_CODE')}
+          json.dump(result,open('/tmp/result.json','w'),separators=(',',':'))
+          PY
+          encoded="$(base64 -w0 /tmp/result.json)"
+          api="https://api.github.com/repos/${REPO}/contents/render-probe/result.json"
+          headers=(-H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
+          existing_sha="$(curl --silent --show-error "${headers[@]}" "${api}?ref=${REF_NAME}" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha",""))' 2>/dev/null || true)"
+          ENCODED="$encoded" EXISTING_SHA="$existing_sha" REF_NAME="$REF_NAME" python3 - <<'PY'
+          import json,os
+          p={'message':'probe: publish sanitized Render route state','content':os.environ['ENCODED'],'branch':os.environ['REF_NAME']}
+          if os.environ.get('EXISTING_SHA'): p['sha']=os.environ['EXISTING_SHA']
+          json.dump(p,open('/tmp/put.json','w'),separators=(',',':'))
+          PY
+          curl --fail --silent --show-error -X PUT "${headers[@]}" -H 'Content-Type: application/json' --data-binary @/tmp/put.json "$api" >/dev/null
