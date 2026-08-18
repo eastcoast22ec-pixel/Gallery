@@ -32,47 +32,43 @@ jobs:
           python3 - <<'PY'
           import base64, json, re
           outer=json.load(open('/tmp/request.json'))
-          raw=base64.b64decode(outer['content']).decode()
-          req=json.loads(raw)
+          req=json.loads(base64.b64decode(outer['content']).decode())
           sha=str(req.get('target_sha','')).lower()
           if not re.fullmatch(r'[0-9a-f]{40}', sha): raise SystemExit('invalid target_sha')
           open('/tmp/target_sha','w').write(sha)
           PY
-          target_sha="$(cat /tmp/target_sha)"
 
-          found=0
           for attempt in $(seq 1 18); do
             curl --fail --silent --show-error "${headers[@]}" \
               "${api}/actions/workflows/mp-artifact-courier-v5.yml/runs?branch=mp-artifact-courier-v5&event=push&per_page=20" > /tmp/runs.json
             python3 - <<'PY'
-          import json, os
+          import json
           target=open('/tmp/target_sha').read().strip()
           runs=json.load(open('/tmp/runs.json')).get('workflow_runs',[])
           match=next((r for r in runs if str(r.get('head_sha','')).lower()==target), None)
-          out={
-            'found': bool(match),
+          json.dump({
             'run_id': match.get('id') if match else None,
             'status': match.get('status') if match else None,
             'conclusion': match.get('conclusion') if match else None,
-          }
-          json.dump(out,open('/tmp/run.json','w'),separators=(',',':'))
+          }, open('/tmp/run.json','w'), separators=(',',':'))
           PY
             run_id="$(python3 -c 'import json; print(json.load(open("/tmp/run.json")).get("run_id") or "")')"
             status="$(python3 -c 'import json; print(json.load(open("/tmp/run.json")).get("status") or "")')"
             if [ -n "$run_id" ] && [ "$status" = "completed" ]; then
               curl --fail --silent --show-error "${headers[@]}" \
                 "${api}/actions/runs/${run_id}/artifacts?per_page=20" > /tmp/artifacts.json
-              found=1
               break
             fi
             sleep 4
           done
 
           python3 - <<'PY'
-          import json
+          import json, os
           target=open('/tmp/target_sha').read().strip()
           run=json.load(open('/tmp/run.json'))
-          arts=json.load(open('/tmp/artifacts.json')).get('artifacts',[]) if run.get('status')=='completed' else []
+          arts=[]
+          if os.path.exists('/tmp/artifacts.json'):
+              arts=json.load(open('/tmp/artifacts.json')).get('artifacts',[])
           matches=[a for a in arts if str(a.get('name','')).startswith('mp-artifact-courier-') and not a.get('expired')]
           result={
             'schema_version':1,
@@ -89,8 +85,9 @@ jobs:
 
           encoded="$(base64 -w0 /tmp/result.json)"
           existing_sha="$(curl --silent --show-error "${headers[@]}" \
-            "${api}/contents/locator/result.json?ref=${REF_NAME}" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
-          python3 - <<'PY'
+            "${api}/contents/locator/result.json?ref=${REF_NAME}" | \
+            python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
+          ENCODED="$encoded" EXISTING_SHA="$existing_sha" python3 - <<'PY'
           import json, os
           payload={
             'message':'locator: publish courier artifact id',
@@ -104,6 +101,3 @@ jobs:
           curl --fail --silent --show-error -X PUT "${headers[@]}" \
             -H 'Content-Type: application/json' --data-binary @/tmp/put.json \
             "${api}/contents/locator/result.json" >/dev/null
-        env:
-          ENCODED: ${{ env.ENCODED }}
-          EXISTING_SHA: ${{ env.EXISTING_SHA }}
