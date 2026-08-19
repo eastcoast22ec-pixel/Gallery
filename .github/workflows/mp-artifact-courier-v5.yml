@@ -122,29 +122,38 @@ jobs:
           download_path="$(python3 -c 'import json; print(json.load(open("/tmp/grant.json"))["download_path"])')"
           filename="$(python3 -c 'import json; print(json.load(open("/tmp/grant.json"))["filename"])')"
           download_url="${CONTROL_ORIGIN}${download_path}/${filename}"
+          mkdir -p /tmp/deliverable
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
             --retry 1 --retry-delay 1 \
-            "$download_url" -o "/tmp/${filename}"
+            "$download_url" -o "/tmp/deliverable/${filename}"
           FILENAME="$filename" python3 - <<'PY'
-          import hashlib,json,os,zipfile
+          import hashlib,json,os,pathlib,zipfile
           name=os.environ['FILENAME']
-          path='/tmp/'+name
-          if not os.path.isfile(path) or os.path.getsize(path)<1024: raise SystemExit('artifact missing or too small')
-          if name.lower().endswith('.apk') and not zipfile.is_zipfile(path): raise SystemExit('invalid apk container')
-          sha=hashlib.sha256(open(path,'rb').read()).hexdigest()
-          json.dump({'schema_version':1,'mode':'relay','filename':name,'size_bytes':os.path.getsize(path),'sha256':sha},open('/tmp/artifact-meta.json','w'),separators=(',',':'))
-          print(f"artifact_ready filename={name} size={os.path.getsize(path)} sha256={sha}")
+          path=pathlib.Path('/tmp/deliverable')/name
+          ext=path.suffix.lower()
+          allowed={'.apk','.zip','.json','.pdf'}
+          if ext not in allowed: raise SystemExit('artifact type not allowed')
+          if not path.is_file() or path.stat().st_size < 1: raise SystemExit('artifact missing or empty')
+          if ext in {'.apk','.zip'} and not zipfile.is_zipfile(path): raise SystemExit('invalid zip container')
+          if ext == '.json':
+              with path.open('r',encoding='utf-8') as handle: json.load(handle)
+          if ext == '.pdf':
+              with path.open('rb') as handle:
+                  if handle.read(5) != b'%PDF-': raise SystemExit('invalid pdf container')
+          sha=hashlib.sha256(path.read_bytes()).hexdigest()
+          json.dump({'schema_version':1,'mode':'relay','filename':name,'size_bytes':path.stat().st_size,'sha256':sha},open('/tmp/artifact-meta.json','w'),separators=(',',':'))
+          print(f"artifact_ready filename={name} size={path.stat().st_size} sha256={sha}")
           PY
           rm -f /tmp/grant.json /tmp/request-source.json
 
-      - name: Upload ChatGPT delivery metadata or fallback APK
+      - name: Upload ChatGPT delivery metadata or relay artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mp-artifact-courier-${{ github.run_id }}
           path: |
             /tmp/handoff.json
-            /tmp/*.apk
             /tmp/artifact-meta.json
+            /tmp/deliverable/*
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
