@@ -1,0 +1,74 @@
+name: Temporary AADL v0.3.25 ChatGPT handoff
+
+on:
+  push:
+    branches:
+      - tmp-aadl-v0325-chatgpt-20260819-5f2c8e
+    paths:
+      - bridge/AADL-QuickPay-v0.3.25-selectize-candidate.apk
+
+permissions:
+  contents: write
+
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout temporary bridge
+        uses: actions/checkout@v4
+        with:
+          ref: tmp-aadl-v0325-chatgpt-20260819-5f2c8e
+
+      - name: Verify exact APK identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk='bridge/AADL-QuickPay-v0.3.25-selectize-candidate.apk'
+          test -f "$apk"
+          test "$(stat -c%s "$apk")" = '2758722'
+          test "$(sha256sum "$apk" | awk '{print $1}')" = '9fe825ac2893b384ea6817b17a9e2971dc9de6099ac38449a24afd519191beef'
+          python3 - <<'PY'
+          import zipfile
+          p='bridge/AADL-QuickPay-v0.3.25-selectize-candidate.apk'
+          if not zipfile.is_zipfile(p):
+              raise SystemExit('APK is not a valid ZIP container')
+          PY
+
+      - name: Upload verified APK for ChatGPT connector
+        uses: actions/upload-artifact@v4
+        with:
+          name: aadl-quickpay-v0.3.25-chatgpt-bridge
+          path: bridge/AADL-QuickPay-v0.3.25-selectize-candidate.apk
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Publish sanitized locator
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p bridge
+          cat > bridge/result.json <<EOF
+          {
+            "schema_version": 1,
+            "run_id": ${RUN_ID},
+            "run_attempt": ${RUN_ATTEMPT},
+            "head_sha": "${HEAD_SHA}",
+            "artifact_name": "aadl-quickpay-v0.3.25-chatgpt-bridge",
+            "apk_filename": "AADL-QuickPay-v0.3.25-selectize-candidate.apk",
+            "apk_size": 2758722,
+            "apk_sha256": "9fe825ac2893b384ea6817b17a9e2971dc9de6099ac38449a24afd519191beef",
+            "source_sha": "96f853fd8ee28fb3ddc3e4dd3f751f90797eb9dc",
+            "circleci_job": 73,
+            "validation": "PASS"
+          }
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bridge/result.json
+          git commit -m 'artifact(aadl): publish temporary ChatGPT bridge locator'
+          git push origin HEAD:tmp-aadl-v0325-chatgpt-20260819-5f2c8e
