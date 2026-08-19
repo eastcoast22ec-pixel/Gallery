@@ -1,1 +1,1 @@
-{"schema_version":1,"probe":"ingress-direct-ticket","target_deploy_sha":"d84f39020ccd28286dc93335e8b5306616dff554"}
+{"schema_version":1,"probe":"noop-after-workflow-restore","target_deploy_sha":"06c2640e0d41f93fe7ed572e5b1a429f8f4165b9"}
