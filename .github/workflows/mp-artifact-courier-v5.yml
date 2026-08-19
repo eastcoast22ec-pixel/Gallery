@@ -14,9 +14,9 @@ permissions:
 jobs:
   courier:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 6
     steps:
-      - name: Fetch and validate request
+      - name: Validate request and bind OIDC audience
         env:
           REQUEST_API: https://api.github.com/repos/eastcoast22ec-pixel/Gallery/contents/courier/request.json?ref=${{ github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -30,61 +30,22 @@ jobs:
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             "$REQUEST_API" -o /tmp/request-source.json
           GITHUB_SHA_VALUE="$GITHUB_SHA" python3 - <<'PY'
-          import hashlib, json, os
-          src = json.load(open('/tmp/request-source.json', encoding='utf-8'))
-          required = {
-              'schema_version', 'session_id', 'request_nonce', 'recipient_public_key_b64',
-              'source_sha', 'job_number', 'artifact_path', 'expected_size'
-          }
-          if set(src) != required or src.get('schema_version') != 1:
-              raise SystemExit('invalid request schema')
-          binding = dict(src)
-          binding['courier_sha'] = os.environ['GITHUB_SHA_VALUE'].lower()
-          canonical = json.dumps(binding, sort_keys=True, separators=(',', ':'))
-          audience = 'mp-artifact-courier:v1:' + hashlib.sha256(canonical.encode()).hexdigest()
-          open('/tmp/binding.json', 'w', encoding='utf-8').write(canonical)
-          open('/tmp/audience.txt', 'w', encoding='utf-8').write(audience)
+          import hashlib, json, os, re
+          src=json.load(open('/tmp/request-source.json', encoding='utf-8'))
+          required={'schema_version','session_id','request_nonce','recipient_public_key_b64','source_sha','job_number','artifact_path','expected_size'}
+          if set(src)!=required or src.get('schema_version')!=1: raise SystemExit('invalid request schema')
+          if not re.fullmatch(r'[0-9a-f]{40}', str(src.get('source_sha','')).lower()): raise SystemExit('invalid source sha')
+          binding=dict(src)
+          binding['courier_sha']=os.environ['GITHUB_SHA_VALUE'].lower()
+          canonical=json.dumps(binding,sort_keys=True,separators=(',',':'))
+          audience='mp-artifact-courier:v1:'+hashlib.sha256(canonical.encode()).hexdigest()
+          open('/tmp/binding.json','w',encoding='utf-8').write(canonical)
+          open('/tmp/audience.txt','w',encoding='utf-8').write(audience)
           PY
 
-      - name: Probe ticket endpoint safely
+      - name: Exchange GitHub OIDC for zero-copy handoff or relay grant
         env:
-          TICKET_ENDPOINT: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/__control/artifact-courier-ticket
-          PWA_HEALTH_ENDPOINT: https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/healthz
-        run: |
-          set -euo pipefail
-          code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
-            -o /tmp/probe-body \
-            -w '%{http_code}' \
-            "$TICKET_ENDPOINT")"
-          content_type="$(curl --silent --show-error --head --proto '=https' --tlsv1.2 \
-            "$TICKET_ENDPOINT" | awk 'BEGIN{IGNORECASE=1} /^content-type:/{gsub("\r",""); print $2; exit}')"
-          bytes="$(wc -c < /tmp/probe-body | tr -d ' ')"
-          printf 'ticket_endpoint_probe http=%s content_type=%s bytes=%s\n' "$code" "${content_type:-none}" "$bytes"
-          rm -f /tmp/probe-body
-
-          health_code="$(curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
-            -o /tmp/pwa-health.json \
-            -w '%{http_code}' \
-            "$PWA_HEALTH_ENDPOINT")"
-          HEALTH_HTTP="$health_code" python3 - <<'PY'
-          import json, os, re
-          data = json.load(open('/tmp/pwa-health.json', encoding='utf-8'))
-          status = str(data.get('status', ''))
-          component = str(data.get('component', ''))
-          revision = str(data.get('control_revision', 'missing'))
-          safe = re.compile(r'^[A-Za-z0-9_.:-]{1,120}$')
-          if not safe.fullmatch(status): status = 'redacted'
-          if not safe.fullmatch(component): component = 'redacted'
-          if not safe.fullmatch(revision): revision = 'redacted'
-          print(f"pwa_health http={os.environ['HEALTH_HTTP']} status={status} component={component} control_revision={revision}")
-          if os.environ['HEALTH_HTTP'] != '200' or status != 'ok':
-              raise SystemExit('pwa health gate failed')
-          PY
-          rm -f /tmp/pwa-health.json
-
-      - name: Exchange GitHub OIDC for encrypted courier ticket
-        env:
-          TICKET_ENDPOINT: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/__control/artifact-courier-ticket
+          DIRECT_ENDPOINT: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/__control/artifact-direct-ticket
         run: |
           set -euo pipefail
           umask 077
@@ -95,78 +56,104 @@ jobs:
             -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
             "$oidc_url" -o /tmp/oidc.json
           OIDC_TOKEN="$(python3 -c 'import json; print(json.load(open("/tmp/oidc.json"))["value"])')"
-          set +e
           http_code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
             -H "Authorization: Bearer ${OIDC_TOKEN}" \
             -H 'Content-Type: application/json' \
             --data-binary @/tmp/binding.json \
-            -o /tmp/ticket-response.json \
+            -o /tmp/direct-response.json \
             -w '%{http_code}' \
-            "$TICKET_ENDPOINT")"
-          curl_status=$?
-          set -e
-          if [ "$curl_status" -ne 0 ]; then
-            printf 'ticket_exchange_transport_error curl_status=%s http=%s\n' "$curl_status" "${http_code:-000}"
-            rm -f /tmp/oidc.json /tmp/ticket-response.json
-            exit "$curl_status"
-          fi
+            "$DIRECT_ENDPOINT")"
           if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
-            TICKET_HTTP="$http_code" python3 - <<'PY'
+            DIRECT_HTTP="$http_code" python3 - <<'PY'
           import json, os, re
-          try:
-              data = json.load(open('/tmp/ticket-response.json', encoding='utf-8'))
-              code = str(data.get('error', 'unknown'))
-          except Exception:
-              code = 'invalid_json'
-          if not re.fullmatch(r'[A-Za-z0-9_.:-]{1,120}', code):
-              code = 'redacted'
-          print(f"ticket_exchange_failed http={os.environ['TICKET_HTTP']} error={code}")
+          try: code=str(json.load(open('/tmp/direct-response.json')).get('error','unknown'))
+          except Exception: code='invalid_json'
+          if not re.fullmatch(r'[A-Za-z0-9_.:-]{1,120}',code): code='redacted'
+          print(f"direct_grant_failed http={os.environ['DIRECT_HTTP']} error={code}")
           PY
-            rm -f /tmp/oidc.json /tmp/ticket-response.json
             exit 22
           fi
           python3 - <<'PY'
-          import json
-          data = json.load(open('/tmp/ticket-response.json', encoding='utf-8'))
-          ticket = data.get('ticket', '')
-          if data.get('schema_version') != 1 or not ticket.startswith('v1.'):
-              raise SystemExit('invalid ticket response')
-          json.dump({'schema_version': 1, 'ticket': ticket}, open('/tmp/render-request.json', 'w', encoding='utf-8'), separators=(',', ':'))
+          import json,re
+          data=json.load(open('/tmp/direct-response.json',encoding='utf-8'))
+          if data.get('schema_version') != 1: raise SystemExit('invalid direct response schema')
+          handoff=data.get('signed_handoff') or {}
+          handoff_path=str(handoff.get('handoff_path','')).strip()
+          handoff_name=str(handoff.get('filename','')).strip()
+          handoff_sha=str(handoff.get('sha256','')).strip().lower()
+          if handoff_path:
+              if not re.fullmatch(r'/__control/artifact-handoff/[0-9a-f]{64}',handoff_path): raise SystemExit('invalid handoff path')
+              if not re.fullmatch(r'[A-Za-z0-9._-]{1,180}',handoff_name): raise SystemExit('invalid handoff filename')
+              if not re.fullmatch(r'[0-9a-f]{64}',handoff_sha): raise SystemExit('invalid handoff sha256')
+              json.dump({
+                  'schema_version':1,
+                  'mode':'zero-copy',
+                  'handoff_path':handoff_path,
+                  'filename':handoff_name,
+                  'sha256':handoff_sha,
+                  'job_number':handoff.get('job_number'),
+                  'artifact_path':handoff.get('artifact_path'),
+                  'expires_in_seconds':handoff.get('expires_in_seconds')
+              },open('/tmp/handoff.json','w'),separators=(',',':'))
+              open('/tmp/delivery-mode','w').write('zero-copy')
+          else:
+              grant=data.get('direct_artifact') or {}
+              path=str(grant.get('download_path','')).strip()
+              name=str(grant.get('filename','')).strip()
+              if not re.fullmatch(r'/__control/artifact/[0-9a-f]{64}',path): raise SystemExit('invalid direct grant')
+              if not re.fullmatch(r'[A-Za-z0-9._-]{1,180}',name): raise SystemExit('invalid artifact filename')
+              json.dump({'download_path':path,'filename':name},open('/tmp/grant.json','w'),separators=(',',':'))
+              open('/tmp/delivery-mode','w').write('relay')
           PY
-          rm -f /tmp/oidc.json /tmp/ticket-response.json
+          rm -f /tmp/oidc.json /tmp/direct-response.json /tmp/binding.json /tmp/audience.txt
 
-      - name: Stream blind encrypted artifact from Render
+      - name: Download CircleCI artifact only when zero-copy is unavailable
         env:
-          RENDER_ENDPOINT: https://mp-export-zr-connector.onrender.com/v1/ops/artifact-courier
+          CONTROL_ORIGIN: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev
         run: |
           set -euo pipefail
           umask 077
+          mode="$(cat /tmp/delivery-mode)"
+          if [ "$mode" = "zero-copy" ]; then
+            echo 'zero_copy_handoff=ready; binary relay skipped'
+            rm -f /tmp/request-source.json
+            exit 0
+          fi
+          download_path="$(python3 -c 'import json; print(json.load(open("/tmp/grant.json"))["download_path"])')"
+          filename="$(python3 -c 'import json; print(json.load(open("/tmp/grant.json"))["filename"])')"
+          download_url="${CONTROL_ORIGIN}${download_path}/${filename}"
+          mkdir -p /tmp/deliverable
           curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-            -H 'Content-Type: application/json' \
-            --data-binary @/tmp/render-request.json \
-            "$RENDER_ENDPOINT" -o /tmp/artifact-courier.mpac
-          test -s /tmp/artifact-courier.mpac
-          python3 - <<'PY'
-          import hashlib, json, os
-          path = '/tmp/artifact-courier.mpac'
-          sha = hashlib.sha256(open(path, 'rb').read()).hexdigest()
-          request = json.load(open('/tmp/request-source.json', encoding='utf-8'))
-          json.dump({
-              'schema_version': 1,
-              'session_id': request['session_id'],
-              'encrypted_size': os.path.getsize(path),
-              'encrypted_sha256': sha,
-          }, open('/tmp/courier-meta.json', 'w', encoding='utf-8'), separators=(',', ':'))
+            --retry 1 --retry-delay 1 \
+            "$download_url" -o "/tmp/deliverable/${filename}"
+          FILENAME="$filename" python3 - <<'PY'
+          import hashlib,json,os,pathlib,zipfile
+          name=os.environ['FILENAME']
+          path=pathlib.Path('/tmp/deliverable')/name
+          ext=path.suffix.lower()
+          allowed={'.apk','.zip','.json','.pdf'}
+          if ext not in allowed: raise SystemExit('artifact type not allowed')
+          if not path.is_file() or path.stat().st_size < 1: raise SystemExit('artifact missing or empty')
+          if ext in {'.apk','.zip'} and not zipfile.is_zipfile(path): raise SystemExit('invalid zip container')
+          if ext == '.json':
+              with path.open('r',encoding='utf-8') as handle: json.load(handle)
+          if ext == '.pdf':
+              with path.open('rb') as handle:
+                  if handle.read(5) != b'%PDF-': raise SystemExit('invalid pdf container')
+          sha=hashlib.sha256(path.read_bytes()).hexdigest()
+          json.dump({'schema_version':1,'mode':'relay','filename':name,'size_bytes':path.stat().st_size,'sha256':sha},open('/tmp/artifact-meta.json','w'),separators=(',',':'))
+          print(f"artifact_ready filename={name} size={path.stat().st_size} sha256={sha}")
           PY
-          rm -f /tmp/render-request.json /tmp/binding.json /tmp/request-source.json /tmp/audience.txt
+          rm -f /tmp/grant.json /tmp/request-source.json
 
-      - name: Upload encrypted courier artifact
+      - name: Upload ChatGPT delivery metadata or relay artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mp-artifact-courier-${{ github.run_id }}
           path: |
-            /tmp/artifact-courier.mpac
-            /tmp/courier-meta.json
+            /tmp/handoff.json
+            /tmp/artifact-meta.json
+            /tmp/deliverable/*
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
