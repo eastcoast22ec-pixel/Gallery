@@ -1,0 +1,22 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>MP ZR Express · V400 Staging</title></head><body style="background:#070707;color:#fff;font-family:system-ui;padding:24px">جارٍ تحميل PWA V400…<script>
+(async()=>{
+ const PROD='https://mp-zr-express-pwa.eastcoast22-ec.workers.dev';
+ const r=await fetch('./source-index.html',{cache:'no-store'}); if(!r.ok) throw new Error('source index '+r.status);
+ let h=await r.text();
+ const repl=new Map([
+  ['href="/manifest.webmanifest"',`href="${PROD}/manifest.webmanifest"`],
+  ['href="/icon.svg"',`href="${PROD}/icon.svg"`],
+  ['href="/styles.css?v=20260814-0956"',`href="${PROD}/styles.css?v=20260814-0956"`],
+  ['href="/dashboard-v2.css?v=20260814-0956"',`href="${PROD}/dashboard-v2.css?v=20260814-0956"`],
+  ['href="/dashboard-v3.css?v=20260814-0956"',`href="${PROD}/dashboard-v3.css?v=20260814-0956"`],
+  ['src="/app.js?v=20260814-0956"',`src="${PROD}/app.js?v=20260814-0956"`],
+  ['src="/dashboard-v3.js?v=20260815-0545"',`src="${PROD}/dashboard-v3.js?v=20260815-0545"`],
+  ['src="/dashboard-v2.js?v=20260814-0956"',`src="${PROD}/dashboard-v2.js?v=20260814-0956"`]
+ ]);
+ for(const [a,b] of repl) h=h.replaceAll(a,b);
+ const guard=`<script>(()=>{const U='${PROD}',F=window.fetch.bind(window);window.fetch=(i,o={})=>{const m=String(o.method||((i&&i.method)||'GET')).toUpperCase();if(!['GET','HEAD'].includes(m))return Promise.resolve(new Response(JSON.stringify({detail:'V400 staging is read-only'}),{status:403,headers:{'content-type':'application/json'}}));let u;try{u=new URL(typeof i==='string'?i:i.url,location.href)}catch{return F(i,o)}if(u.origin===location.origin&&(u.pathname.startsWith('/api/')||u.pathname.startsWith('/v1/')))return F(U+u.pathname+u.search,{...o,method:m,credentials:'omit'});return F(i,o)}})();<\/script><div style="position:fixed;z-index:2147483647;top:8px;left:8px;padding:5px 9px;border-radius:999px;background:#161616;color:#46e4c2;border:1px solid #46e4c266;font:700 11px system-ui;pointer-events:none">V400 STAGING · READ ONLY</div>`;
+ h=h.replace('<body>', '<body>'+guard);
+ h=h.replace('<script type="module" src="'+PROD+'/dashboard-v3.js?v=20260815-0545"></script>', '<script type="module" src="./catalog-v400-preview.js?v=20260824-0341"></script><script type="module" src="'+PROD+'/dashboard-v3.js?v=20260815-0545"></script>');
+ document.open();document.write(h);document.close();
+})().catch(e=>{document.body.textContent='تعذر تحميل V400 Staging: '+e.message});
+</script></body></html>

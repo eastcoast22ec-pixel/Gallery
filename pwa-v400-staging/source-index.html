@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#070707">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="واجهة Mirage Pub الخاصة لإدارة طرود ZR Express">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css?v=20260814-0956">
+    <link rel="stylesheet" href="/dashboard-v2.css?v=20260814-0956">
+    <link rel="stylesheet" href="/dashboard-v3.css?v=20260814-0956">
+    <title>MP ZR Express</title>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand-mark" aria-hidden="true">MP</div>
+      <div class="brand-copy">
+        <strong>Mirage Pub</strong>
+        <span>ZR Express Console</span>
+      </div>
+      <span id="network-state" class="network-state" role="status">متصل</span>
+      <button id="important-notifications" class="icon-button" type="button" aria-label="فتح الإشعارات المهمة" title="الإشعارات المهمة">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M10 21h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <span id="important-notifications-badge" class="notification-badge" hidden>0</span>
+      </button>
+    </header>
+
+    <main>
+      <section id="view-dashboard" class="view active" aria-labelledby="dashboard-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">ZR EXPRESS · LIVE</p>
+            <h1 id="dashboard-title">لوحة الحساب</h1>
+          </div>
+          <div class="dashboard-toolbar">
+            <span id="dashboard-freshness" class="freshness-pill" data-state="loading">LOADING</span>
+            <button id="refresh-dashboard" class="icon-button" type="button" aria-label="تحديث لوحة الحساب">↻</button>
+          </div>
+        </div>
+
+        <article class="hero-card balance-card">
+          <div class="balance-head">
+            <div class="card-label">الرصيد الجاهز للسحب لدى ZR Express</div>
+            <span id="balance-freshness" class="live-pill" data-state="loading">LOADING</span>
+          </div>
+          <div id="balance-value" class="balance-value" aria-live="polite">—</div>
+          <div class="balance-meta">
+            <span id="balance-updated">آخر تحديث: —</span>
+            <span>المصدر الرسمي: supplier-payment/supplier-balance</span>
+          </div>
+
+          <div class="balance-breakdown" aria-label="تفاصيل الرصيد الرسمية">
+            <div class="money-tile primary"><span>الجاهز للسحب</span><strong id="balance-ready">—</strong></div>
+            <div class="money-tile"><span>غير الجاهز بعد</span><strong id="balance-not-ready">—</strong></div>
+            <div class="money-tile"><span>إجمالي المحصّل / المسلم</span><strong id="balance-delivered-total">—</strong></div>
+            <div class="money-tile"><span>إجمالي المدفوع</span><strong id="balance-paid-total">—</strong></div>
+            <div class="money-tile"><span>جاهز للدفع</span><strong id="balance-ready-paid">—</strong></div>
+          </div>
+
+          <p id="balance-note" class="card-note">يتم جلب الأرقام من ZR فقط، ولا يتم تقدير الرصيد من COD.</p>
+          <button id="refresh-balance" class="secondary-button compact" type="button">تحديث الرصيد</button>
+        </article>
+
+        <section class="dashboard-section" aria-labelledby="parcel-state-title">
+          <div class="dashboard-section-head">
+            <div>
+              <h2 id="parcel-state-title">حالة الطرود</h2>
+              <p id="parcel-coverage">Turso durable baseline</p>
+            </div>
+            <span id="parcels-freshness" class="freshness-pill" data-state="loading">LOADING</span>
+          </div>
+          <div class="parcel-metrics">
+            <div class="parcel-metric"><strong id="metric-active">—</strong><span>الطرود النشطة</span></div>
+            <div class="parcel-metric"><strong id="metric-pending">—</strong><span>Pending</span></div>
+            <div class="parcel-metric"><strong id="metric-transit">—</strong><span>In Transit / Delivery</span></div>
+            <div class="parcel-metric"><strong id="metric-delivered">—</strong><span>Delivered · 30 يوم</span></div>
+            <div class="parcel-metric attention"><strong id="metric-returned">—</strong><span>Returned · 30 يوم</span></div>
+            <div class="parcel-metric"><strong id="metric-undelivered">—</strong><span>غير المستلمة</span></div>
+            <div class="parcel-metric danger"><strong id="metric-aging">—</strong><span>تجاوزت 3 أيام</span></div>
+          </div>
+          <div class="data-quality-note">النشط وغير المستلم وAging تُقرأ من Turso durable baseline ثم direct immutable parcel IDs عندما تكون baseline متوفرة. لا تعتمد هذه البطاقات على account-wide ZR pagination.</div>
+        </section>
+
+        <section class="dashboard-section" aria-labelledby="periods-title">
+          <div class="dashboard-section-head">
+            <div>
+              <h2 id="periods-title">الملخص</h2>
+              <p>عدد الطرود · المبالغ · التوصيل · توزيع الحالات</p>
+            </div>
+            <span id="summary-freshness" class="freshness-pill" data-state="loading">LOADING</span>
+          </div>
+          <div class="period-grid">
+            <article id="period-1" class="period-card"><div class="skeleton-block"></div></article>
+            <article id="period-7" class="period-card"><div class="skeleton-block"></div></article>
+            <article id="period-30" class="period-card"><div class="skeleton-block"></div></article>
+          </div>
+          <div id="status-distribution" class="status-distribution" aria-label="توزيع الحالات"></div>
+          <div class="data-quality-note">«آخر 24 ساعة» فترة متحركة وليست تقديراً لليوم. جميع القيم مصدرها ZR/Turso ولا تُستنتج من بيانات محلية قديمة.</div>
+        </section>
+
+        <section class="dashboard-section" aria-labelledby="important-title">
+          <div class="dashboard-section-head">
+            <div>
+              <h2 id="important-title">الحالات المهمة الآن</h2>
+              <p>مشاكل نشطة · قيد الإرجاع · مع الموزع · Aging للطرود النشطة فقط</p>
+            </div>
+            <span class="coverage-pill">LIVE STATE</span>
+          </div>
+          <div id="important-list" class="compact-list"></div>
+        </section>
+
+        <section class="dashboard-section" aria-labelledby="delivered-today-title">
+          <div class="dashboard-section-head">
+            <div>
+              <h2 id="delivered-today-title">الطرود المستلمة اليوم</h2>
+              <p>انتقلت إلى Delivered اليوم حسب توقيت الجزائر</p>
+            </div>
+            <span id="delivered-today-count" class="coverage-pill">…</span>
+          </div>
+          <div id="delivered-today-list" class="compact-list">
+            <div class="skeleton-block"></div>
+            <div class="skeleton-block"></div>
+          </div>
+          <div class="data-quality-note">تُحدد القائمة من سجل تغيّر الحالات الدائم في Turso، ثم تُقرأ تفاصيل كل طرد مباشرة من ZR بواسطة Parcel ID. لا تُحسب من تاريخ إنشاء الطلبية.</div>
+        </section>
+
+        <section class="dashboard-section" aria-labelledby="latest-title">
+          <div class="dashboard-section-head">
+            <div>
+              <h2 id="latest-title">آخر تحديثات الطرود النشطة</h2>
+              <p>قراءات مباشرة مرتبة حسب updatedAt</p>
+            </div>
+            <span class="coverage-pill">DIRECT IDs</span>
+          </div>
+          <div id="latest-list" class="compact-list"></div>
+        </section>
+
+        <div class="dashboard-grid">
+          <article class="status-card">
+            <div class="card-title-row">
+              <h2>حالة النظام</h2>
+              <span id="system-indicator" class="status-dot idle" aria-label="غير معروف"></span>
+            </div>
+            <dl id="system-status" class="metric-list">
+              <div><dt>Cloudflare</dt><dd>—</dd></div>
+              <div><dt>Render</dt><dd>—</dd></div>
+              <div><dt>Guardian</dt><dd>—</dd></div>
+            </dl>
+          </article>
+
+          <article class="status-card">
+            <div class="card-title-row"><h2>حالة المزامنة</h2><span class="mini-tag">Turso</span></div>
+            <dl class="metric-list">
+              <div><dt>آخر نجاح</dt><dd id="sync-last-success">—</dd></div>
+              <div><dt>آخر محاولة</dt><dd id="sync-last-attempt">—</dd></div>
+              <div><dt>Baseline</dt><dd id="sync-baseline">—</dd></div>
+            </dl>
+            <div id="sync-status" class="data-placeholder">جارٍ القراءة…</div>
+          </article>
+          <div id="orders-summary" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <section id="view-orders" class="view" aria-labelledby="orders-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">إرسال آمن</p>
+            <h1 id="orders-title">طرود جديدة</h1>
+          </div>
+          <button id="add-order" class="secondary-button compact" type="button">+ طرد</button>
+        </div>
+
+        <div class="safety-note">
+          <span aria-hidden="true">✓</span>
+          <p>تتم المعاينة والتحقق من العنوان أولاً. لن يُرسل أي طرد قبل موافقتك الصريحة. Smart Address Resolver يعمل exact-only ولا يسمح بتخمين fuzzy.</p>
+        </div>
+
+        <form id="orders-form" novalidate>
+          <div id="orders-list" class="orders-list"></div>
+          <div class="sticky-actions">
+            <span id="draft-state" class="draft-state">المسودة محفوظة محلياً</span>
+            <button id="preview-orders" class="primary-button" type="submit">معاينة والتحقق</button>
+          </div>
+        </form>
+
+        <section id="preview-panel" class="preview-panel" aria-labelledby="preview-title" hidden>
+          <div class="card-title-row">
+            <h2 id="preview-title">نتيجة المعاينة</h2>
+            <span id="preview-expiry" class="mini-tag"></span>
+          </div>
+          <div id="preview-results"></div>
+          <label class="confirm-row">
+            <input id="submit-confirmation" type="checkbox">
+            <span>راجعت الأسماء، الهواتف، المبالغ، والعناوين المحلولة وأوافق على الإرسال إلى ZR Express.</span>
+          </label>
+          <button id="submit-orders" class="danger-button" type="button" disabled>إرسال الطرود الآن</button>
+        </section>
+
+        <section id="submit-result" class="preview-panel" aria-live="polite" hidden></section>
+      </section>
+
+      <section id="view-tracking" class="view" aria-labelledby="tracking-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">بحث ومتابعة</p>
+            <h1 id="tracking-title">الطرود</h1>
+          </div>
+        </div>
+
+        <article class="search-card">
+          <form id="search-form" class="inline-form">
+            <label for="search-query">بحث سريع</label>
+            <div class="input-action">
+              <input id="search-query" name="query" type="search" autocomplete="off" placeholder="Tracking · الاسم · الهاتف · source_order_id">
+              <button class="primary-button compact" type="submit">بحث</button>
+            </div>
+            <p class="search-help">يبدأ البحث من Turso baseline المستقرة، ثم يستخدم استعلام ZR محدداً بالكلمة للعثور على الطرود النهائية عند الحاجة. لا يتم تنفيذ account-wide pagination من الواجهة.</p>
+            <div class="search-source"><span>مصدر النتائج</span><strong id="search-source">—</strong></div>
+          </form>
+        </article>
+
+        <article class="search-card">
+          <form id="track-form" class="inline-form">
+            <label for="tracking-reference">قراءة مباشرة لطرد محدد</label>
+            <div class="input-action">
+              <input id="tracking-reference" name="reference" required autocomplete="off" placeholder="Parcel ID أو Tracking">
+              <button class="secondary-button compact" type="submit">فتح</button>
+            </div>
+          </form>
+        </article>
+
+        <div id="tracking-results" class="results-stack" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="التنقل الرئيسي">
+      <button class="nav-button active" type="button" data-view="dashboard" aria-current="page">
+        <span class="nav-icon" aria-hidden="true">⌂</span><span>الرئيسية</span>
+      </button>
+      <button class="nav-button" type="button" data-view="orders">
+        <span class="nav-icon" aria-hidden="true">＋</span><span>إرسال</span>
+      </button>
+      <button class="nav-button" type="button" data-view="tracking">
+        <span class="nav-icon" aria-hidden="true">⌕</span><span>تتبع</span>
+      </button>
+    </nav>
+
+    <aside id="install-banner" class="install-banner" hidden>
+      <div><strong>ثبّت التطبيق</strong><span>وصول أسرع من شاشة Android الرئيسية.</span></div>
+      <button id="install-app" class="primary-button compact" type="button">تثبيت</button>
+      <button id="dismiss-install" class="icon-button" type="button" aria-label="إخفاء">×</button>
+    </aside>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+    <aside id="notification-center" class="detail-sheet" aria-modal="true" role="dialog" aria-labelledby="notification-center-title" hidden>
+      <section class="detail-panel notification-panel">
+        <div class="detail-handle" aria-hidden="true"></div>
+        <div class="detail-header">
+          <button id="notification-center-close" class="icon-button" type="button" aria-label="إغلاق الإشعارات">×</button>
+          <div>
+            <h2 id="notification-center-title">الإشعارات المهمة</h2>
+            <p>أحداث اليوم المهمة · توقيت الجزائر</p>
+          </div>
+          <span id="notification-center-status" class="live-pill" data-state="loading">LOADING</span>
+        </div>
+        <div class="notification-panel-body">
+          <div id="notification-center-list" class="notification-center-list" aria-live="polite">
+            <div class="skeleton-block"></div>
+          </div>
+        </div>
+        <div class="detail-actions">
+          <button id="notification-center-refresh" class="secondary-button compact" type="button">تحديث الإشعارات</button>
+        </div>
+      </section>
+    </aside>
+
+    <aside id="parcel-detail" class="detail-sheet" aria-modal="true" role="dialog" aria-labelledby="detail-title" hidden>
+      <section class="detail-panel">
+        <div class="detail-handle" aria-hidden="true"></div>
+        <div class="detail-header">
+          <button id="detail-close" class="icon-button" type="button" aria-label="إغلاق">×</button>
+          <div>
+            <h2 id="detail-title">تفاصيل الطرد</h2>
+            <p id="detail-reference">—</p>
+          </div>
+          <span class="live-pill" data-state="live">LIVE</span>
+        </div>
+        <div id="detail-grid" class="detail-grid"></div>
+        <section class="history-block">
+          <h3>تاريخ الحالات</h3>
+          <div id="detail-history" class="history-list"></div>
+        </section>
+        <div class="detail-actions">
+          <button id="detail-label" class="primary-button" type="button">Label A6</button>
+          <button class="secondary-button compact" type="button" onclick="document.getElementById('detail-close').click()">إغلاق</button>
+        </div>
+      </section>
+    </aside>
+    <template id="order-template">
+      <fieldset class="order-card">
+        <legend><span class="order-number">طرد 1</span></legend>
+        <button class="remove-order icon-button" type="button" aria-label="حذف الطرد">×</button>
+
+        <div class="form-grid">
+          <label class="field span-2">اسم الزبون
+            <input name="customer_name" required minlength="2" maxlength="100" autocomplete="name">
+          </label>
+          <label class="field">رقم الهاتف
+            <input name="phone" required inputmode="tel" autocomplete="tel" placeholder="0550000000">
+          </label>
+          <label class="field">المبلغ (دج)
+            <input name="amount" required type="number" inputmode="decimal" min="1" max="150000" step="0.01">
+          </label>
+          <label class="field span-2">نوع التوصيل
+            <select name="delivery_mode">
+              <option value="home">إلى المنزل</option>
+              <option value="pickup-point">مكتب ZR (Stop Desk)</option>
+            </select>
+          </label>
+
+          <div class="destination-fields home-fields span-2">
+            <div class="form-grid nested-grid">
+              <label class="field">البلدية
+                <input name="commune" autocomplete="address-level2" placeholder="مثال: Batna">
+              </label>
+              <label class="field">الولاية
+                <input name="wilaya" autocomplete="address-level1" placeholder="مثال: Batna">
+              </label>
+              <label class="field span-2">الشارع / الحي
+                <input name="street" autocomplete="street-address">
+              </label>
+              <label class="field span-2">العنوان الأصلي كما أعطاه الزبون
+                <textarea name="original_address" maxlength="250" rows="2"></textarea>
+              </label>
+            </div>
+          </div>
+
+          <div class="destination-fields pickup-fields span-2" hidden>
+            <label class="field">مكتب ZR المطلوب
+              <input name="hub_query" placeholder="مثال: Hub Biskra 07">
+            </label>
+          </div>
+
+          <details class="optional-fields span-2">
+            <summary>تفاصيل المنتج (اختياري)</summary>
+            <div class="form-grid nested-grid">
+              <label class="field">المنتج
+                <input name="product_name" value="Cartes de visite">
+              </label>
+              <label class="field">الكمية
+                <input name="quantity" type="number" inputmode="numeric" min="1" max="10000" value="1">
+              </label>
+              <label class="field span-2">وصف داخلي
+                <input name="description" maxlength="250">
+              </label>
+            </div>
+          </details>
+
+          <label class="field span-2 id-field">معرّف منع التكرار
+            <input name="source_order_id" readonly aria-describedby="id-help">
+            <small id="id-help">يبقى ثابتاً عند إعادة المحاولة حتى لا يتكرر الطرد.</small>
+          </label>
+        </div>
+      </fieldset>
+    </template>
+
+    <script type="module" src="/app.js?v=20260814-0956"></script>
+    <script type="module" src="/dashboard-v3.js?v=20260815-0545"></script>
+    <script type="module" src="/dashboard-v2.js?v=20260814-0956"></script>
+  </body>
+</html>
