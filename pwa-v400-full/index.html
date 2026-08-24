@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#070707">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="واجهة Mirage Pub الخاصة لإدارة طرود ZR Express — V400 Staging Read Only">
+  <link rel="manifest" href="https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/manifest.webmanifest">
+  <link rel="icon" href="https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/styles.css?v=20260814-0956">
+  <link rel="stylesheet" href="https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/dashboard-v2.css?v=20260814-0956">
+  <link rel="stylesheet" href="https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/dashboard-v3.css?v=20260814-0956">
+  <title>MP ZR Express · V400 Full Staging</title>
+  <style>
+    body{background:#07101e;color:#f3f8fd;min-height:100vh}.staging-ribbon{position:fixed;z-index:2147483647;top:max(8px,env(safe-area-inset-top));left:8px;padding:6px 10px;border-radius:999px;background:#07101eee;color:#46e4c2;border:1px solid #46e4c266;font:800 11px system-ui;pointer-events:none}.staging-fallback{font-family:system-ui,-apple-system,"Segoe UI",sans-serif}.view[hidden]{display:none!important}.bottom-nav{z-index:40}.read-only-note{margin:0 0 14px;padding:10px 12px;border:1px solid #46e4c244;border-radius:14px;background:#46e4c20d;color:#bff8ea;font-size:12px;line-height:1.65}.staging-disabled{opacity:.6}
+  </style>
+</head>
+<body class="staging-fallback">
+  <div class="staging-ribbon">V400 FULL STAGING · READ ONLY</div>
+  <header class="app-header">
+    <div class="brand-mark" aria-hidden="true">MP</div>
+    <div class="brand-copy"><strong>Mirage Pub</strong><span>ZR Express Console</span></div>
+    <span id="network-state" class="network-state" role="status">STAGING</span>
+    <button id="important-notifications" class="icon-button" type="button" aria-label="فتح الإشعارات المهمة" title="الإشعارات المهمة">🔔<span id="important-notifications-badge" class="notification-badge" hidden>0</span></button>
+  </header>
+
+  <main>
+    <section id="view-dashboard" class="view active" aria-labelledby="dashboard-title">
+      <div class="read-only-note">نسخة فحص كاملة للواجهة. كل عمليات الكتابة والإرسال محجوبة. البيانات الحية غير مطلوبة لتقييم التصميم والتنقل وCatalog V400.</div>
+      <div class="section-heading"><div><p class="eyebrow">ZR EXPRESS · STAGING</p><h1 id="dashboard-title">لوحة الحساب</h1></div><div class="dashboard-toolbar"><span id="dashboard-freshness" class="freshness-pill" data-state="loading">READ ONLY</span><button id="refresh-dashboard" class="icon-button staging-disabled" type="button" aria-label="تحديث لوحة الحساب">↻</button></div></div>
+      <article class="hero-card balance-card"><div class="balance-head"><div class="card-label">الرصيد الجاهز للسحب لدى ZR Express</div><span id="balance-freshness" class="live-pill" data-state="loading">STAGING</span></div><div id="balance-value" class="balance-value">—</div><div class="balance-meta"><span id="balance-updated">آخر تحديث: غير متصل في وضع الفحص</span><span>المصدر الرسمي: supplier-payment/supplier-balance</span></div><div class="balance-breakdown"><div class="money-tile primary"><span>الجاهز للسحب</span><strong id="balance-ready">—</strong></div><div class="money-tile"><span>غير الجاهز بعد</span><strong id="balance-not-ready">—</strong></div><div class="money-tile"><span>إجمالي المحصّل / المسلم</span><strong id="balance-delivered-total">—</strong></div><div class="money-tile"><span>إجمالي المدفوع</span><strong id="balance-paid-total">—</strong></div><div class="money-tile"><span>جاهز للدفع</span><strong id="balance-ready-paid">—</strong></div></div><p id="balance-note" class="card-note">يتم تعطيل القراءة الحية في Staging حفاظًا على العزل.</p><button id="refresh-balance" class="secondary-button compact staging-disabled" type="button">تحديث الرصيد</button></article>
+      <section class="dashboard-section"><div class="dashboard-section-head"><div><h2>حالة الطرود</h2><p>Turso durable baseline</p></div><span class="freshness-pill" data-state="loading">STAGING</span></div><div class="parcel-metrics"><div class="parcel-metric"><strong>—</strong><span>الطرود النشطة</span></div><div class="parcel-metric"><strong>—</strong><span>Pending</span></div><div class="parcel-metric"><strong>—</strong><span>In Transit / Delivery</span></div><div class="parcel-metric"><strong>—</strong><span>Delivered · 30 يوم</span></div><div class="parcel-metric attention"><strong>—</strong><span>Returned · 30 يوم</span></div><div class="parcel-metric"><strong>—</strong><span>غير المستلمة</span></div><div class="parcel-metric danger"><strong>—</strong><span>تجاوزت 3 أيام</span></div></div></section>
+      <section class="dashboard-section"><div class="dashboard-section-head"><div><h2>الملخص</h2><p>عدد الطرود · المبالغ · التوصيل · توزيع الحالات</p></div><span class="freshness-pill" data-state="loading">STAGING</span></div><div class="period-grid"><article class="period-card"><div class="skeleton-block"></div></article><article class="period-card"><div class="skeleton-block"></div></article><article class="period-card"><div class="skeleton-block"></div></article></div></section>
+      <section class="dashboard-section"><div class="dashboard-section-head"><div><h2>الحالات المهمة الآن</h2><p>مشاكل نشطة · قيد الإرجاع · مع الموزع · Aging</p></div><span class="coverage-pill">READ ONLY</span></div><div class="compact-list"><div class="empty-state">لا يتم طلب بيانات حية في نسخة الفحص.</div></div></section>
+      <section class="dashboard-section"><div class="dashboard-section-head"><div><h2>الطرود المستلمة اليوم</h2><p>انتقلت إلى Delivered اليوم حسب توقيت الجزائر</p></div><span class="coverage-pill">—</span></div><div class="compact-list"><div class="skeleton-block"></div><div class="skeleton-block"></div></div></section>
+      <section class="dashboard-section"><div class="dashboard-section-head"><div><h2>آخر تحديثات الطرود النشطة</h2><p>قراءات مباشرة مرتبة حسب updatedAt</p></div><span class="coverage-pill">DIRECT IDs</span></div><div class="compact-list"></div></section>
+      <div class="dashboard-grid"><article class="status-card"><div class="card-title-row"><h2>حالة النظام</h2><span class="status-dot idle"></span></div><dl class="metric-list"><div><dt>Cloudflare</dt><dd>غير مقروء في Staging</dd></div><div><dt>Render</dt><dd>غير مقروء في Staging</dd></div><div><dt>Guardian</dt><dd>غير مقروء في Staging</dd></div></dl></article><article class="status-card"><div class="card-title-row"><h2>حالة المزامنة</h2><span class="mini-tag">Turso</span></div><dl class="metric-list"><div><dt>آخر نجاح</dt><dd>—</dd></div><div><dt>آخر محاولة</dt><dd>—</dd></div><div><dt>Baseline</dt><dd>—</dd></div></dl><div class="data-placeholder">وضع الفحص لا يجلب بيانات حسابك.</div></article></div>
+    </section>
+
+    <section id="view-orders" class="view" aria-labelledby="orders-title" hidden>
+      <div class="section-heading"><div><p class="eyebrow">إرسال آمن</p><h1 id="orders-title">طرود جديدة</h1></div><button id="add-order" class="secondary-button compact" type="button">+ طرد</button></div>
+      <div class="safety-note"><span aria-hidden="true">✓</span><p>V400 FULL STAGING: تستطيع فحص كل الحقول والتنقل واختيار الولاية والبلدية. لا يمكن إرسال أي طلب إلى ZR Express.</p></div>
+      <form id="orders-form" novalidate><div id="orders-list" class="orders-list"></div><div class="sticky-actions"><span id="draft-state" class="draft-state">وضع فحص محلي</span><button id="preview-orders" class="primary-button" type="submit">معاينة الواجهة</button></div></form>
+      <section id="preview-panel" class="preview-panel" hidden><div class="card-title-row"><h2>نتيجة المعاينة</h2><span class="mini-tag">READ ONLY</span></div><div id="preview-results"></div><label class="confirm-row"><input id="submit-confirmation" type="checkbox" disabled><span>الإرسال الحقيقي معطل في نسخة Staging.</span></label><button id="submit-orders" class="danger-button" type="button" disabled>الإرسال معطل في Staging</button></section>
+      <section id="submit-result" class="preview-panel" hidden></section>
+    </section>
+
+    <section id="view-tracking" class="view" aria-labelledby="tracking-title" hidden>
+      <div class="section-heading"><div><p class="eyebrow">بحث ومتابعة</p><h1 id="tracking-title">الطرود</h1></div></div>
+      <article class="search-card"><form id="search-form" class="inline-form"><label for="search-query">بحث سريع</label><div class="input-action"><input id="search-query" name="query" type="search" autocomplete="off" placeholder="Tracking · الاسم · الهاتف · source_order_id"><button class="primary-button compact" type="submit">بحث</button></div><p class="search-help">وضع الفحص يعرض الواجهة فقط ولا يرسل استعلامًا للحساب الحقيقي.</p><div class="search-source"><span>مصدر النتائج</span><strong id="search-source">STAGING</strong></div></form></article>
+      <article class="search-card"><form id="track-form" class="inline-form"><label for="tracking-reference">قراءة مباشرة لطرد محدد</label><div class="input-action"><input id="tracking-reference" name="reference" autocomplete="off" placeholder="Parcel ID أو Tracking"><button class="secondary-button compact" type="submit">فتح</button></div></form></article>
+      <div id="tracking-results" class="results-stack" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="التنقل الرئيسي"><button class="nav-button active" type="button" data-view="dashboard" aria-current="page"><span class="nav-icon">⌂</span><span>الرئيسية</span></button><button class="nav-button" type="button" data-view="orders"><span class="nav-icon">＋</span><span>إرسال</span></button><button class="nav-button" type="button" data-view="tracking"><span class="nav-icon">⌕</span><span>تتبع</span></button></nav>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <aside id="notification-center" class="detail-sheet" aria-modal="true" role="dialog" hidden><section class="detail-panel notification-panel"><div class="detail-handle"></div><div class="detail-header"><button id="notification-center-close" class="icon-button" type="button">×</button><div><h2>الإشعارات المهمة</h2><p>نسخة فحص · بدون قراءة حساب حقيقية</p></div><span class="live-pill" data-state="loading">STAGING</span></div><div class="notification-panel-body"><div class="notification-center-list"><div class="empty-state">لا يتم جلب إشعارات حية في وضع الفحص.</div></div></div></section></aside>
+
+  <aside id="parcel-detail" class="detail-sheet" aria-modal="true" role="dialog" hidden><section class="detail-panel"><div class="detail-handle"></div><div class="detail-header"><button id="detail-close" class="icon-button" type="button">×</button><div><h2>تفاصيل الطرد</h2><p>Staging Preview</p></div><span class="live-pill">READ ONLY</span></div><div class="detail-grid"><div class="data-placeholder">هذه النافذة موجودة لفحص التصميم فقط.</div></div><section class="history-block"><h3>تاريخ الحالات</h3><div class="history-list"></div></section></section></aside>
+
+  <template id="order-template"><fieldset class="order-card"><legend><span class="order-number">طرد 1</span></legend><button class="remove-order icon-button" type="button" aria-label="حذف الطرد">×</button><div class="form-grid"><label class="field span-2">اسم الزبون<input name="customer_name" required minlength="2" maxlength="100" autocomplete="name"></label><label class="field">رقم الهاتف<input name="phone" required inputmode="tel" autocomplete="tel" placeholder="0550000000"></label><label class="field">المبلغ (دج)<input name="amount" required type="number" inputmode="decimal" min="1" max="150000" step="0.01"></label><label class="field span-2">نوع التوصيل<select name="delivery_mode"><option value="home">إلى المنزل</option><option value="pickup-point">مكتب ZR (Stop Desk)</option></select></label><div class="destination-fields home-fields span-2"><div class="form-grid nested-grid"><label class="field">البلدية<input name="commune" autocomplete="address-level2" placeholder="مثال: Batna"></label><label class="field">الولاية<input name="wilaya" autocomplete="address-level1" placeholder="مثال: Batna"></label><label class="field span-2">الشارع / الحي<input name="street" autocomplete="street-address"></label><label class="field span-2">العنوان الأصلي كما أعطاه الزبون<textarea name="original_address" maxlength="250" rows="2"></textarea></label></div></div><div class="destination-fields pickup-fields span-2" hidden><label class="field">مكتب ZR المطلوب<input name="hub_query" placeholder="مثال: Hub Biskra 07"></label></div><details class="optional-fields span-2"><summary>تفاصيل المنتج (اختياري)</summary><div class="form-grid nested-grid"><label class="field">المنتج<input name="product_name" value="Cartes de visite"></label><label class="field">الكمية<input name="quantity" type="number" inputmode="numeric" min="1" max="10000" value="1"></label><label class="field span-2">وصف داخلي<input name="description" maxlength="250"></label></div></details><label class="field span-2 id-field">معرّف منع التكرار<input name="source_order_id" readonly value="STAGING-READ-ONLY"><small>لا يتم استخدامه خارج صفحة الفحص.</small></label></div></fieldset></template>
+
+  <script>
+  (()=>{
+    const views=[...document.querySelectorAll('.view')],nav=[...document.querySelectorAll('.nav-button')],list=document.getElementById('orders-list'),tpl=document.getElementById('order-template');
+    const toast=(m)=>{const t=document.getElementById('toast');t.textContent=m;t.hidden=false;setTimeout(()=>t.hidden=true,2600)};
+    const setView=(name)=>{views.forEach(v=>{const a=v.id==='view-'+name;v.hidden=!a;v.classList.toggle('active',a)});nav.forEach(b=>{const a=b.dataset.view===name;b.classList.toggle('active',a);a?b.setAttribute('aria-current','page'):b.removeAttribute('aria-current')});scrollTo({top:0,behavior:'smooth'})};
+    nav.forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+    function renumber(){[...list.querySelectorAll('.order-card')].forEach((c,i)=>{const n=c.querySelector('.order-number');if(n)n.textContent='طرد '+(i+1)})}
+    function addOrder(){const node=tpl.content.cloneNode(true);list.append(node);renumber()}
+    document.getElementById('add-order').addEventListener('click',addOrder);
+    list.addEventListener('click',e=>{const b=e.target.closest('.remove-order');if(!b)return;const cards=list.querySelectorAll('.order-card');if(cards.length<=1){toast('يجب إبقاء طرد واحد على الأقل للفحص');return}b.closest('.order-card')?.remove();renumber()});
+    list.addEventListener('change',e=>{if(e.target.name!=='delivery_mode')return;const card=e.target.closest('.order-card');const pickup=e.target.value==='pickup-point';card.querySelector('.home-fields').hidden=pickup;card.querySelector('.pickup-fields').hidden=!pickup});
+    document.getElementById('orders-form').addEventListener('submit',e=>{e.preventDefault();const p=document.getElementById('preview-panel');p.hidden=false;document.getElementById('preview-results').innerHTML='<div class="result-card"><h3>معاينة Staging</h3><p>تم التحقق من سلوك الواجهة محليًا. لن يُرسل أي طلب حقيقي.</p></div>';p.scrollIntoView({behavior:'smooth',block:'start'})});
+    document.getElementById('search-form').addEventListener('submit',e=>{e.preventDefault();document.getElementById('tracking-results').innerHTML='<div class="result-card"><h3>بحث Read Only</h3><p>الاستعلامات الحية معطلة في Staging.</p></div>'});
+    document.getElementById('track-form').addEventListener('submit',e=>{e.preventDefault();document.getElementById('tracking-results').innerHTML='<div class="result-card"><h3>تتبع Read Only</h3><p>القراءة الحية معطلة في Staging.</p></div>'});
+    document.getElementById('important-notifications').addEventListener('click',()=>document.getElementById('notification-center').hidden=false);document.getElementById('notification-center-close').addEventListener('click',()=>document.getElementById('notification-center').hidden=true);document.getElementById('detail-close').addEventListener('click',()=>document.getElementById('parcel-detail').hidden=true);
+    const F=window.fetch.bind(window);window.fetch=(input,opts={})=>{const method=String(opts.method||input?.method||'GET').toUpperCase();if(!['GET','HEAD'].includes(method))return Promise.resolve(new Response(JSON.stringify({detail:'V400 staging is read-only'}),{status:403,headers:{'content-type':'application/json'}}));return F(input,opts)};
+    document.querySelectorAll('#refresh-dashboard,#refresh-balance').forEach(b=>b.addEventListener('click',()=>toast('القراءة الحية معطلة في Staging')));
+    addOrder();
+  })();
+  </script>
+  <script type="module" src="https://rawcdn.githack.com/eastcoast22ec-pixel/Gallery/75400611116807504b4d417fa2f8377232fd354e/pwa-v400-staging/catalog-v400-preview.js"></script>
+</body>
+</html>
