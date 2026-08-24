@@ -1,6 +1,7 @@
-const CATALOG_URL = new URL("./catalog-v400-data.json?v=20260824-0341", import.meta.url).href;
+const DATA_URL = "https://cdn.jsdelivr.net/gh/HassanMak29/dz-wilaya-api@0c7591fa6fa0e42fa1fcb22afc0aeeadec36bf13/src/data/wilayas.json";
 const EXPECTED_WILAYAS = 58;
 const EXPECTED_COMMUNES = 1541;
+const CANDIDATE_SHA = "1fef8f5612b16b070437a2adeeb1af53aad6a2ab";
 
 const normalize = (value) => String(value || "")
   .normalize("NFKD")
@@ -10,6 +11,7 @@ const normalize = (value) => String(value || "")
   .trim()
   .replace(/\s+/g, " ");
 
+const keyify = (value) => normalize(value).replace(/\s+/g, "_");
 const titleCase = (key) => String(key || "")
   .split("_")
   .filter(Boolean)
@@ -43,31 +45,34 @@ function banner(message, failed = false) {
   }
   node.innerHTML = failed
     ? `<strong>Catalog Preview غير متاح</strong><span>${message}</span>`
-    : `<strong>Catalog V400</strong><span>${message}</span>`;
+    : `<strong>Catalog V400 · READ ONLY</strong><span>${message}</span>`;
 }
 
 function buildCatalog(raw) {
-  const counts = raw?.counts || {};
-  if (counts.official_wilayas !== EXPECTED_WILAYAS || counts.official_communes !== EXPECTED_COMMUNES) {
-    throw new Error(`catalog coverage mismatch (${counts.official_wilayas || 0}/${counts.official_communes || 0})`);
+  if (!Array.isArray(raw) || raw.length !== EXPECTED_WILAYAS) {
+    throw new Error(`wilaya coverage mismatch (${Array.isArray(raw) ? raw.length : 0})`);
   }
-  const wilayaKeys = Array.isArray(raw.official_wilayas) ? [...raw.official_wilayas] : [];
-  if (wilayaKeys.length !== EXPECTED_WILAYAS) throw new Error("wilaya list is incomplete");
-
-  const communesByWilaya = new Map(wilayaKeys.map((key) => [key, []]));
-  const communeEntries = Object.values(raw.official_communes || {});
-  for (const entry of communeEntries) {
-    const key = String(entry?.wilaya_key || "");
-    const commune = String(entry?.commune || "").trim();
-    if (!communesByWilaya.has(key) || !commune) continue;
-    communesByWilaya.get(key).push(commune);
-  }
-  const total = [...communesByWilaya.values()].reduce((sum, items) => sum + items.length, 0);
-  if (total !== EXPECTED_COMMUNES) throw new Error(`commune list is incomplete (${total})`);
-  for (const items of communesByWilaya.values()) {
+  const communesByWilaya = new Map();
+  let total = 0;
+  for (const wilaya of raw) {
+    const fr = String(wilaya?.name?.fr || "").trim();
+    const key = keyify(fr);
+    if (!key || communesByWilaya.has(key)) throw new Error("invalid or duplicate wilaya");
+    const items = Array.isArray(wilaya?.communes)
+      ? wilaya.communes.map((entry) => String(entry?.name?.fr || "").trim()).filter(Boolean)
+      : [];
     items.sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }));
+    communesByWilaya.set(key, items);
+    total += items.length;
   }
-  return { wilayaKeys, communesByWilaya, counts, source: raw.source || {} };
+  if (total !== EXPECTED_COMMUNES) throw new Error(`commune coverage mismatch (${total})`);
+  const wilayaKeys = [...communesByWilaya.keys()].sort((a, b) => titleCase(a).localeCompare(titleCase(b), "fr", { sensitivity: "base" }));
+  return {
+    wilayaKeys,
+    communesByWilaya,
+    counts: { official_wilayas: wilayaKeys.length, official_communes: total },
+    source: { candidate_sha: CANDIDATE_SHA, transport_sha: "0c7591fa6fa0e42fa1fcb22afc0aeeadec36bf13" }
+  };
 }
 
 function createSelect(input, kind) {
@@ -110,14 +115,12 @@ function fillCommunes(select, catalog, wilayaKey, preferred = "") {
   const wanted = normalize(preferred);
   let matched = false;
   for (const commune of items) {
-    const selected = wanted && normalize(commune) === wanted;
-    matched ||= Boolean(selected);
+    const selected = Boolean(wanted && normalize(commune) === wanted);
+    matched ||= selected;
     addOption(select, commune, commune, selected);
   }
   select.disabled = !wilayaKey;
-  if (preferred && !matched) {
-    addOption(select, preferred, `${preferred} · محفوظة`, true);
-  }
+  if (preferred && !matched) addOption(select, preferred, `${preferred} · محفوظة`, true);
 }
 
 function enhanceCard(card, catalog) {
@@ -142,14 +145,14 @@ function enhanceCard(card, catalog) {
 
   const communeSelect = createSelect(communeInput, "commune");
   fillCommunes(communeSelect, catalog, selectedKey, currentCommune);
-
   wilayaInput.replaceWith(wilayaSelect);
   communeInput.replaceWith(communeSelect);
+
   const homeFields = card.querySelector(".home-fields");
   if (homeFields && !homeFields.querySelector(".catalog-v400-meta")) {
     const note = document.createElement("small");
     note.className = "catalog-v400-meta";
-    note.textContent = "اختر الولاية ثم البلدية من Catalog الرسمي المضمّن في نسخة الفحص.";
+    note.textContent = "V400 Staging: 58 ولاية و1541 بلدية، فحص فقط ولا إرسال.";
     homeFields.append(note);
   }
 
@@ -164,11 +167,10 @@ function enhanceCard(card, catalog) {
 async function start() {
   injectStyle();
   try {
-    const response = await fetch(CATALOG_URL, { cache: "no-store", credentials: "same-origin" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const raw = await response.json();
-    const catalog = buildCatalog(raw);
-    banner(`${catalog.counts.official_wilayas} ولاية · ${catalog.counts.official_communes} بلدية · Snapshot ${catalog.source.authority_as_of || "موثّق"}`);
+    const response = await fetch(DATA_URL, { cache: "force-cache", mode: "cors", credentials: "omit" });
+    if (!response.ok) throw new Error(`transport HTTP ${response.status}`);
+    const catalog = buildCatalog(await response.json());
+    banner(`${catalog.counts.official_wilayas} ولاية · ${catalog.counts.official_communes} بلدية · Candidate ${CANDIDATE_SHA.slice(0, 8)}`);
     const list = document.getElementById("orders-list");
     if (!list) return;
     list.querySelectorAll(".order-card").forEach((card) => enhanceCard(card, catalog));
@@ -183,8 +185,8 @@ async function start() {
     });
     observer.observe(list, { childList: true, subtree: true });
   } catch (error) {
-    console.error("Catalog V400 preview failed", error);
-    banner("تم إبقاء حقول النص الأصلية دون تعديل لأن تغطية الكاتالوغ لم تُثبت.", true);
+    console.error("Catalog V400 staging failed", error);
+    banner(`فشل تحقق 58/1541: ${error.message}`, true);
   }
 }
 
