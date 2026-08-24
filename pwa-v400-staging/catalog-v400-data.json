@@ -1,0 +1,44 @@
+{
+  "counts": {
+    "desk_aliases_normalized": 58,
+    "home_aliases_normalized": 130,
+    "official_communes": 1541,
+    "official_hubs": 77,
+    "official_wilayas": 58
+  },
+  "desk_aliases": {
+    "bureau zr ali mendjeli": {
+      "source_aliases": ["bureau ZR Ali Mendjeli"],
+      "source_groups": ["desk_destination_alias_overrides"],
+      "targets": ["Hub NOUVELLE VILLE 25 مكتب المدينة الجديدة"]
+    },
+    "bureau zr dellys": {
+      "source_aliases": ["bureau ZR Dellys"],
+      "source_groups": ["desk_destination_alias_overrides"],
+      "targets": ["Hub DELLYS 35 مكتب دلس"]
+    }
+  },
+  "home_aliases": {},
+  "imported_regression_cases": [],
+  "normalization": {
+    "allowed_characters": "ASCII letters, ASCII digits, Arabic U+0600-U+06FF",
+    "casefold": false,
+    "fuzzy_matching": false,
+    "matching": "exact normalized keys only",
+    "lowercase": true,
+    "other_characters": "replace with one collapsed space",
+    "strip_combining_marks": true,
+    "unicode_decimal_digits_to_ascii": true,
+    "unicode_form": "NFKD"
+  },
+  "official_communes": {},
+  "official_hubs": [],
+  "official_wilayas": [
+    "adrar","ain_defla","ain_temouchent","alger","annaba","batna","bechar","bejaia","beni_abbes","biskra","blida","bordj_badji_mokhtar","bordj_bou_arreridj","bouira","boumerdes","chlef","constantine","djanet","djelfa","el_bayadh","el_meghaier","el_menia","el_oued","el_tarf","ghardaia","guelma","illizi","in_guezzam","in_salah","jijel","khenchela","laghouat","mascara","medea","mila","mostaganem","msila","naama","oran","ouargla","ouled_djellal","oum_el_bouaghi","relizane","saida","setif","sidi_bel_abbes","skikda","souk_ahras","tamanrasset","tebessa","tiaret","timimoun","tindouf","tipaza","tissemsilt","tizi_ouzou","tlemcen","touggourt"
+  ],
+  "schema": "MP_ZR_SMART_ADDRESS_KNOWLEDGE_V1",
+  "source": {
+    "authority_as_of": "2026-07-30",
+    "scope": "ZR address knowledge only; no Excel parser, exporter, templates, Yalidine data, prices, or delivery-cost logic imported"
+  }
+}

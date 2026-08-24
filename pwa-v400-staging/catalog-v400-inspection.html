@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="theme-color" content="#070707">
+    <meta name="color-scheme" content="dark">
+    <title>MP ZR Express · Catalog V400 Inspection</title>
+    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./dashboard-v2.css">
+    <link rel="stylesheet" href="./dashboard-v3.css">
+    <style>
+      body{background:#070707;color:#fff;min-height:100vh}.inspection-shell{max-width:720px;margin:0 auto;padding:18px 14px 48px}.inspection-head{padding:14px 0 18px}.inspection-head h1{margin:4px 0 8px;font-size:26px}.inspection-head p{margin:0;color:#aeb8b6;line-height:1.7}.inspection-badge{display:inline-flex;padding:6px 10px;border-radius:999px;border:1px solid rgba(232,185,31,.45);color:#ffd33d;font-weight:800;font-size:12px}.inspection-note{margin:0 0 16px;padding:12px 14px;border:1px solid rgba(255,255,255,.12);border-radius:14px;background:#101010;color:#c8cfcd;line-height:1.7}.inspection-note strong{color:#fff}.order-card{position:relative}.inspection-result{margin-top:16px;padding:12px 14px;border-radius:14px;background:#101010;border:1px solid rgba(255,255,255,.1);line-height:1.8;color:#c8cfcd}.inspection-result strong{color:#46e4c2}.field select{min-height:48px}
+    </style>
+  </head>
+  <body>
+    <main class="inspection-shell">
+      <header class="inspection-head">
+        <span class="inspection-badge">PREVIEW · لا إرسال</span>
+        <h1>Catalog V400 · الولايات والبلديات</h1>
+        <p>هذه صفحة فحص للواجهة نفسها المستخدمة في PWA candidate. لا تتصل بـRender ولا تنشئ أي طلبية.</p>
+      </header>
+
+      <section id="view-orders" class="view active">
+        <div class="safety-note">
+          <span aria-hidden="true">✓</span>
+          <p>اختر الولاية أولاً، ثم ستظهر فقط البلديات التابعة لها. الكاتالوغ يفشل مغلقاً إذا لم يثبت تغطية 58 ولاية و1541 بلدية.</p>
+        </div>
+
+        <div class="inspection-note"><strong>جرّب:</strong> الجزائر، وهران، الأغواط، سطيف أو أي ولاية أخرى، ثم افتح قائمة البلدية.</div>
+
+        <div id="orders-list" class="orders-list">
+          <fieldset class="order-card">
+            <legend><span class="order-number">طرد تجريبي</span></legend>
+            <div class="form-grid">
+              <label class="field span-2">اسم الزبون
+                <input value="فحص الكاتالوغ" disabled>
+              </label>
+              <label class="field span-2">نوع التوصيل
+                <select disabled><option>إلى المنزل</option></select>
+              </label>
+              <div class="destination-fields home-fields span-2">
+                <div class="form-grid nested-grid">
+                  <label class="field">البلدية
+                    <input name="commune" autocomplete="address-level2" placeholder="اختر البلدية">
+                  </label>
+                  <label class="field">الولاية
+                    <input name="wilaya" autocomplete="address-level1" placeholder="اختر الولاية">
+                  </label>
+                  <label class="field span-2">الشارع / الحي
+                    <input placeholder="اختياري في صفحة الفحص" disabled>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </fieldset>
+        </div>
+
+        <div class="inspection-result">
+          <strong>ما الذي يجب التأكد منه؟</strong><br>
+          ظهور 58 ولاية، تعطيل البلدية قبل اختيار الولاية، ثم تصفية قائمة البلديات فور اختيار الولاية، وعدم ظهور بلديات من ولاية أخرى.
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./catalog-v400-preview.js?v=20260824-0341"></script>
+  </body>
+</html>
