@@ -1,22 +1,54 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>MP ZR Express · V400 Staging</title></head><body style="background:#070707;color:#fff;font-family:system-ui;padding:24px">جارٍ تحميل PWA V400…<script>
-(async()=>{
- const PROD='https://mp-zr-express-pwa.eastcoast22-ec.workers.dev';
- const r=await fetch('./source-index.html',{cache:'no-store'}); if(!r.ok) throw new Error('source index '+r.status);
- let h=await r.text();
- const repl=new Map([
-  ['href="/manifest.webmanifest"',`href="${PROD}/manifest.webmanifest"`],
-  ['href="/icon.svg"',`href="${PROD}/icon.svg"`],
-  ['href="/styles.css?v=20260814-0956"',`href="${PROD}/styles.css?v=20260814-0956"`],
-  ['href="/dashboard-v2.css?v=20260814-0956"',`href="${PROD}/dashboard-v2.css?v=20260814-0956"`],
-  ['href="/dashboard-v3.css?v=20260814-0956"',`href="${PROD}/dashboard-v3.css?v=20260814-0956"`],
-  ['src="/app.js?v=20260814-0956"',`src="${PROD}/app.js?v=20260814-0956"`],
-  ['src="/dashboard-v3.js?v=20260815-0545"',`src="${PROD}/dashboard-v3.js?v=20260815-0545"`],
-  ['src="/dashboard-v2.js?v=20260814-0956"',`src="${PROD}/dashboard-v2.js?v=20260814-0956"`]
- ]);
- for(const [a,b] of repl) h=h.replaceAll(a,b);
- const guard=`<script>(()=>{const U='${PROD}',F=window.fetch.bind(window);window.fetch=(i,o={})=>{const m=String(o.method||((i&&i.method)||'GET')).toUpperCase();if(!['GET','HEAD'].includes(m))return Promise.resolve(new Response(JSON.stringify({detail:'V400 staging is read-only'}),{status:403,headers:{'content-type':'application/json'}}));let u;try{u=new URL(typeof i==='string'?i:i.url,location.href)}catch{return F(i,o)}if(u.origin===location.origin&&(u.pathname.startsWith('/api/')||u.pathname.startsWith('/v1/')))return F(U+u.pathname+u.search,{...o,method:m,credentials:'omit'});return F(i,o)}})();<\/script><div style="position:fixed;z-index:2147483647;top:8px;left:8px;padding:5px 9px;border-radius:999px;background:#161616;color:#46e4c2;border:1px solid #46e4c266;font:700 11px system-ui;pointer-events:none">V400 STAGING · READ ONLY</div>`;
- h=h.replace('<body>', '<body>'+guard);
- h=h.replace('<script type="module" src="'+PROD+'/dashboard-v3.js?v=20260815-0545"></script>', '<script type="module" src="./catalog-v400-preview.js?v=20260824-0341"></script><script type="module" src="'+PROD+'/dashboard-v3.js?v=20260815-0545"></script>');
- document.open();document.write(h);document.close();
-})().catch(e=>{document.body.textContent='تعذر تحميل V400 Staging: '+e.message});
-</script></body></html>
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#070707">
+  <meta name="color-scheme" content="dark">
+  <title>MP ZR Express · V400 Staging</title>
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;background:#070707;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}body{min-height:100vh}.shell{max-width:760px;margin:0 auto;padding:18px 14px 56px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}.brand{display:flex;align-items:center;gap:10px}.mark{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:#171717;border:1px solid #2a2a2a;font-weight:900}.title{margin:0;font-size:22px}.sub{margin:3px 0 0;color:#9aa5a2;font-size:13px}.badge{display:inline-flex;padding:6px 9px;border-radius:999px;border:1px solid rgba(70,228,194,.35);color:#46e4c2;background:rgba(70,228,194,.07);font-weight:800;font-size:11px;white-space:nowrap}.card{background:#101010;border:1px solid #242424;border-radius:18px;padding:16px;margin-bottom:14px}.safety-note{display:flex;gap:10px;align-items:flex-start;color:#c8cfcd;line-height:1.65}.safety-note strong{color:#fff}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:7px;font-size:13px;color:#bdc6c4}.field.span-2{grid-column:1/-1}.field input,.field select{width:100%;min-height:50px;border-radius:12px;border:1px solid #303030;background:#0a0a0a;color:#fff;padding:0 12px;font:inherit;outline:none}.field input:focus,.field select:focus{border-color:#46e4c2}.muted{color:#8e9996;font-size:12px;line-height:1.6}.status{margin-top:14px;padding:12px;border-radius:14px;background:#0b0b0b;border:1px solid #222;color:#bfc8c6;line-height:1.7}.status strong{color:#46e4c2}.footer{margin-top:14px;color:#7f8b88;font-size:11px;line-height:1.6;word-break:break-word}@media(max-width:560px){.grid{grid-template-columns:1fr}.field.span-2{grid-column:auto}.top{align-items:flex-start}.title{font-size:20px}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="top">
+      <div class="brand"><div class="mark">MP</div><div><h1 class="title">V400 Catalog Staging</h1><p class="sub">فحص بصري مستقل وآمن</p></div></div>
+      <span class="badge">READ ONLY</span>
+    </div>
+
+    <section id="view-orders" class="card">
+      <div class="safety-note"><span>✓</span><div><strong>لا يوجد إرسال أو تعديل Production.</strong><br>هذه الصفحة مخصصة فقط للتحقق بصريًا من اختيار الولاية والبلدية في Candidate V400.</div></div>
+
+      <div id="orders-list" style="margin-top:16px">
+        <fieldset class="order-card" style="border:0;padding:0;margin:0">
+          <div class="grid">
+            <label class="field span-2">اسم الزبون
+              <input value="فحص الكاتالوغ" disabled>
+            </label>
+            <label class="field span-2">نوع التوصيل
+              <select disabled><option>إلى المنزل</option></select>
+            </label>
+            <div class="destination-fields home-fields span-2">
+              <div class="grid">
+                <label class="field">الولاية
+                  <input name="wilaya" autocomplete="address-level1" placeholder="اختر الولاية">
+                </label>
+                <label class="field">البلدية
+                  <input name="commune" autocomplete="address-level2" placeholder="اختر البلدية">
+                </label>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="status"><strong>معيار النجاح:</strong> تظهر 58 ولاية، تبقى البلدية معطلة قبل اختيار الولاية، ثم تعرض فقط بلديات الولاية المختارة. إذا لم يثبت المصدر 58/1541 فسيظهر تنبيه فشل واضح بدل شاشة سوداء.</div>
+      <p class="muted">جرّب الجزائر، وهران، الأغواط، سطيف أو أي ولاية أخرى.</p>
+    </section>
+
+    <div class="footer">Candidate: 1fef8f5612b16b070437a2adeeb1af53aad6a2ab · Staging only · 0 DZD</div>
+  </main>
+  <script type="module" src="./catalog-v400-preview.js?v=20260824-1438"></script>
+</body>
+</html>
