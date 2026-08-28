@@ -1,4 +1,4 @@
-name: QR CircleCI Public Artifact Probe
+name: QR Render Runtime Read
 
 on:
   push:
@@ -11,50 +11,30 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  read:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Fetch CircleCI artifact without credentials
+      - name: Read sanitized Render health
         shell: bash
         run: |
           set -euo pipefail
-          API='https://circleci.com/api/v1.1/project/github/eastcoast22ec-pixel/aadl-quickpay/285/artifacts'
-          code="$(curl --silent --show-error --proto '=https' --tlsv1.2 -o /tmp/artifacts.json -w '%{http_code}' "$API")"
-          echo "circleci_v1_public_artifacts_http=$code"
-          if [ "$code" != "200" ]; then
-            exit 0
-          fi
-          python3 - <<'PY'
-          import json
-          data=json.load(open('/tmp/artifacts.json',encoding='utf-8'))
-          if not isinstance(data,list): raise SystemExit('invalid_artifact_list')
-          target='qr-artifacts/Scanner-QR-Zero-Ads-v0.8.0-debug.apk'
-          matches=[x for x in data if x.get('path')==target]
-          if len(matches)!=1: raise SystemExit(f'artifact_match_count={len(matches)}')
-          url=matches[0].get('url','')
-          if not isinstance(url,str) or not url.startswith('https://'): raise SystemExit('invalid_artifact_url')
-          open('/tmp/artifact-url','w').write(url)
+          URL='https://mp-export-zr-connector.onrender.com/health'
+          code="$(curl --silent --show-error --location --proto '=https' --tlsv1.2 --max-time 90 -o /tmp/health.json -w '%{http_code}' "$URL")"
+          HEALTH_HTTP="$code" python3 - <<'PY'
+          import json, os, re
+          try:
+              data=json.load(open('/tmp/health.json',encoding='utf-8'))
+          except Exception:
+              data={}
+          safe=re.compile(r'^[A-Za-z0-9._:-]{1,120}$')
+          def val(key):
+              v=str(data.get(key,''))
+              return v if safe.fullmatch(v) else 'missing'
+          print('render_health_http='+os.environ['HEALTH_HTTP'])
+          print('render_status='+val('status'))
+          print('render_version='+val('version'))
+          print('render_git_commit='+val('git_commit'))
+          if os.environ['HEALTH_HTTP'] != '200' or val('status') != 'ok':
+              raise SystemExit('render_health_failed')
           PY
-          url="$(cat /tmp/artifact-url)"
-          dl_code="$(curl --silent --show-error --location --proto '=https' --tlsv1.2 -o /tmp/Scanner-QR-Zero-Ads-v0.8.0-debug.apk -w '%{http_code}' "$url")"
-          echo "circleci_v1_public_download_http=$dl_code"
-          if [ "$dl_code" != "200" ]; then
-            rm -f /tmp/Scanner-QR-Zero-Ads-v0.8.0-debug.apk
-            exit 0
-          fi
-          python3 - <<'PY'
-          import hashlib,os,zipfile
-          p='/tmp/Scanner-QR-Zero-Ads-v0.8.0-debug.apk'
-          if not zipfile.is_zipfile(p): raise SystemExit('invalid_apk_container')
-          print('artifact_size='+str(os.path.getsize(p)))
-          print('artifact_sha256='+hashlib.sha256(open(p,'rb').read()).hexdigest())
-          PY
-      - name: Upload APK when public fetch succeeds
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: scanner-qr-v0.8.0-public-circleci
-          path: /tmp/Scanner-QR-Zero-Ads-v0.8.0-debug.apk
-          if-no-files-found: ignore
-          retention-days: 1
-          compression-level: 0
