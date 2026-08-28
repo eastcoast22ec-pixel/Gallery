@@ -1,0 +1,59 @@
+name: QR CircleCI Public Artifact Probe
+
+on:
+  push:
+    branches:
+      - mp-artifact-courier-v5
+    paths:
+      - .github/workflows/qr-circleci-public-artifact-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Fetch CircleCI artifact without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          API='https://circleci.com/api/v2/project/gh/eastcoast22ec-pixel/aadl-quickpay/285/artifacts'
+          code="$(curl --silent --show-error --proto '=https' --tlsv1.2 -o /tmp/artifacts.json -w '%{http_code}' "$API")"
+          echo "circleci_public_artifacts_http=$code"
+          if [ "$code" != "200" ]; then
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json
+          data=json.load(open('/tmp/artifacts.json',encoding='utf-8'))
+          target='qr-artifacts/Scanner-QR-Zero-Ads-v0.8.0-debug.apk'
+          matches=[x for x in data.get('items',[]) if x.get('path')==target]
+          if len(matches)!=1: raise SystemExit(f'artifact_match_count={len(matches)}')
+          url=matches[0].get('url','')
+          if not isinstance(url,str) or not url.startswith('https://'): raise SystemExit('invalid_artifact_url')
+          open('/tmp/artifact-url','w').write(url)
+          PY
+          url="$(cat /tmp/artifact-url)"
+          dl_code="$(curl --silent --show-error --location --proto '=https' --tlsv1.2 -o /tmp/Scanner-QR-Zero-Ads-v0.8.0-debug.apk -w '%{http_code}' "$url")"
+          echo "circleci_public_download_http=$dl_code"
+          if [ "$dl_code" != "200" ]; then
+            rm -f /tmp/Scanner-QR-Zero-Ads-v0.8.0-debug.apk
+            exit 0
+          fi
+          python3 - <<'PY'
+          import hashlib,os,zipfile
+          p='/tmp/Scanner-QR-Zero-Ads-v0.8.0-debug.apk'
+          if not zipfile.is_zipfile(p): raise SystemExit('invalid_apk_container')
+          print('artifact_size='+str(os.path.getsize(p)))
+          print('artifact_sha256='+hashlib.sha256(open(p,'rb').read()).hexdigest())
+          PY
+      - name: Upload APK when public fetch succeeds
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scanner-qr-v0.8.0-public-circleci
+          path: /tmp/Scanner-QR-Zero-Ads-v0.8.0-debug.apk
+          if-no-files-found: ignore
+          retention-days: 1
+          compression-level: 0
