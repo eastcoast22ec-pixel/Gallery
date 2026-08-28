@@ -19,17 +19,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          API='https://circleci.com/api/v2/project/gh/eastcoast22ec-pixel/aadl-quickpay/285/artifacts'
+          API='https://circleci.com/api/v1.1/project/github/eastcoast22ec-pixel/aadl-quickpay/285/artifacts'
           code="$(curl --silent --show-error --proto '=https' --tlsv1.2 -o /tmp/artifacts.json -w '%{http_code}' "$API")"
-          echo "circleci_public_artifacts_http=$code"
+          echo "circleci_v1_public_artifacts_http=$code"
           if [ "$code" != "200" ]; then
             exit 0
           fi
           python3 - <<'PY'
           import json
           data=json.load(open('/tmp/artifacts.json',encoding='utf-8'))
+          if not isinstance(data,list): raise SystemExit('invalid_artifact_list')
           target='qr-artifacts/Scanner-QR-Zero-Ads-v0.8.0-debug.apk'
-          matches=[x for x in data.get('items',[]) if x.get('path')==target]
+          matches=[x for x in data if x.get('path')==target]
           if len(matches)!=1: raise SystemExit(f'artifact_match_count={len(matches)}')
           url=matches[0].get('url','')
           if not isinstance(url,str) or not url.startswith('https://'): raise SystemExit('invalid_artifact_url')
@@ -37,7 +38,7 @@ jobs:
           PY
           url="$(cat /tmp/artifact-url)"
           dl_code="$(curl --silent --show-error --location --proto '=https' --tlsv1.2 -o /tmp/Scanner-QR-Zero-Ads-v0.8.0-debug.apk -w '%{http_code}' "$url")"
-          echo "circleci_public_download_http=$dl_code"
+          echo "circleci_v1_public_download_http=$dl_code"
           if [ "$dl_code" != "200" ]; then
             rm -f /tmp/Scanner-QR-Zero-Ads-v0.8.0-debug.apk
             exit 0
