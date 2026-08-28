@@ -23,7 +23,7 @@ jobs:
           REQUEST_SHA: ${{ github.sha }}
           CONTROL_ORIGIN: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev
           SOURCE_REPO: eastcoast22ec-pixel/mirage-pub-cloud-runner
-          SOURCE_REF: mp-export-zr-connector
+          SOURCE_REF: diagnostic/qr-v080-artifact-probe-20260828
         shell: bash
         run: |
           set -euo pipefail
