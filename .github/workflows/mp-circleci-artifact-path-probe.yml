@@ -3,7 +3,7 @@ name: MP CircleCI Artifact Path Probe
 on:
   push:
     branches:
-      - mp-artifact-courier-v5
+      - diagnostic/qr-v080-artifact-probe-20260828
     paths:
       - artifact-path-probe/request.json
 
@@ -23,7 +23,7 @@ jobs:
           REQUEST_SHA: ${{ github.sha }}
           CONTROL_ORIGIN: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev
           SOURCE_REPO: eastcoast22ec-pixel/mirage-pub-cloud-runner
-          SOURCE_REF: mp-export-zr-connector
+          SOURCE_REF: diagnostic/qr-v080-artifact-probe-20260828
         shell: bash
         run: |
           set -euo pipefail
@@ -82,7 +82,7 @@ jobs:
           PY
           encoded="$(base64 -w0 /tmp/sanitized.json)"
           api="https://api.github.com/repos/${REPO}/contents/artifact-path-probe/result.json"
-          existing_sha="$(curl --silent --show-error "${gh_headers[@]}" "${api}?ref=${REF_NAME}" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha",""))' 2>/dev/null || true)"
+          existing_sha="$(curl --silent --show-error "${gh_headers[@]}" "${api}?ref=${REF_NAME}" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha", ""))' 2>/dev/null || true)"
           ENCODED="$encoded" EXISTING_SHA="$existing_sha" REF_NAME="$REF_NAME" python3 - <<'PY'
           import json,os
           p={'message':'probe: publish sanitized CircleCI artifact paths','content':os.environ['ENCODED'],'branch':os.environ['REF_NAME']}
