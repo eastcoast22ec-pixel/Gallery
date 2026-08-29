@@ -1,0 +1,87 @@
+name: V6 Live Runtime Probe
+
+on:
+  push:
+    branches:
+      - diagnostic/v6-live-runtime-probe-20260829
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Verify Cloudflare V2 runtime contract
+        env:
+          TICKET_ENDPOINT: https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/__control/artifact-courier-ticket
+        run: |
+          set -euo pipefail
+          payload='{"schema_version":2,"session_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","request_nonce":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","recipient_public_key_b64":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","project_slug":"gh/eastcoast22ec-pixel/aadl-quickpay","source_sha":"5555555555555555555555555555555555555555","courier_sha":"cccccccccccccccccccccccccccccccccccccccc","job_number":285,"artifact_path":"qr-artifacts/Scanner-QR-Zero-Ads-v0.8.0-debug.apk","expected_size":1}'
+          ok=0
+          for i in $(seq 1 24); do
+            code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+              -H 'Content-Type: application/json' \
+              --data-binary "$payload" \
+              -o /tmp/ticket-probe.json \
+              -w '%{http_code}' \
+              "$TICKET_ENDPOINT" || true)"
+            error_code="$(python3 - <<'PY'
+          import json,re
+          try:
+              value=json.load(open('/tmp/ticket-probe.json', encoding='utf-8'))
+              code=str(value.get('error','unknown'))
+          except Exception:
+              code='invalid_json'
+          print(code if re.fullmatch(r'[A-Za-z0-9_.:-]{1,120}',code) else 'redacted')
+          PY
+            )"
+            printf 'cloudflare_v2_probe attempt=%s http=%s error=%s\n' "$i" "$code" "$error_code"
+            if [ "$code" = "401" ] && [ "$error_code" = "missing_oidc_token" ]; then
+              ok=1
+              break
+            fi
+            sleep 10
+          done
+          rm -f /tmp/ticket-probe.json
+          test "$ok" = 1
+
+      - name: Verify Render exact production SHA
+        env:
+          HEALTH_ENDPOINT: https://mp-export-zr-connector.onrender.com/healthz
+          EXPECTED_SHA: 97cbb6a6159786dfe219d389307802e76a3e80fc
+        run: |
+          set -euo pipefail
+          ok=0
+          for i in $(seq 1 24); do
+            code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+              -o /tmp/render-health.json \
+              -w '%{http_code}' \
+              "$HEALTH_ENDPOINT" || true)"
+            result="$(HEALTH_HTTP="$code" EXPECTED_SHA="$EXPECTED_SHA" python3 - <<'PY'
+          import json,os,re
+          try:
+              value=json.load(open('/tmp/render-health.json', encoding='utf-8'))
+          except Exception:
+              print('invalid_json')
+              raise SystemExit(0)
+          status=str(value.get('status',''))
+          git_commit=str(value.get('git_commit','')).lower()
+          safe=lambda s: s if re.fullmatch(r'[A-Za-z0-9_.:-]{1,120}',s) else 'redacted'
+          print(f"http={safe(os.environ['HEALTH_HTTP'])} status={safe(status)} git_commit={safe(git_commit)}")
+          PY
+            )"
+            printf 'render_probe attempt=%s %s\n' "$i" "$result"
+            if [ "$code" = "200" ]; then
+              git_commit="$(python3 -c 'import json; print(str(json.load(open("/tmp/render-health.json")).get("git_commit","")).lower())')"
+              status="$(python3 -c 'import json; print(str(json.load(open("/tmp/render-health.json")).get("status","")))')"
+              if [ "$status" = "ok" ] && [ "$git_commit" = "$EXPECTED_SHA" ]; then
+                ok=1
+                break
+              fi
+            fi
+            sleep 10
+          done
+          rm -f /tmp/render-health.json
+          test "$ok" = 1
