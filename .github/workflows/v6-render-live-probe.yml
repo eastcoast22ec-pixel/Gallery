@@ -1,0 +1,32 @@
+name: V6 Render Live Probe
+
+on:
+  push:
+    branches:
+      - diagnostic/v6-render-live-probe-20260829
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read Render health identity
+        env:
+          HEALTH_ENDPOINT: https://mp-export-zr-connector.onrender.com/healthz
+        run: |
+          set -euo pipefail
+          code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+            -o /tmp/render-health.json \
+            -w '%{http_code}' \
+            "$HEALTH_ENDPOINT")"
+          HEALTH_HTTP="$code" python3 - <<'PY'
+          import json, os, re
+          value=json.load(open('/tmp/render-health.json', encoding='utf-8'))
+          def safe(v):
+              s=str(v)
+              return s if re.fullmatch(r'[A-Za-z0-9_.:-]{1,120}', s) else 'redacted'
+          print(f"render_health http={safe(os.environ['HEALTH_HTTP'])} status={safe(value.get('status',''))} git_commit={safe(value.get('git_commit',''))}")
+          PY
