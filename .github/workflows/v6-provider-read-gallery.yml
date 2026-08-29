@@ -1,0 +1,105 @@
+name: V6 provider read via Gallery
+
+on:
+  push:
+    branches:
+      - diagnostic/v6-provider-read-gallery-20260829
+    paths:
+      - .github/workflows/v6-provider-read-gallery.yml
+
+permissions:
+  contents: read
+
+jobs:
+  read-provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      CLOUDFLARE_API_READ_TOKEN: ${{ secrets.CLOUDFLARE_API_READ_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Verify bounded read credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_READ_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo 'provider_credentials_unavailable_in_gallery'
+            exit 78
+          fi
+          if ! printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[0-9a-fA-F]{32}$'; then
+            echo 'provider_account_id_invalid'
+            exit 1
+          fi
+          echo 'provider_credentials_present=true'
+
+      - name: Read active Cloudflare deployments
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          for worker in mp-zr-express-pwa mp-zr-webhook-ingress; do
+            url="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${worker}/deployments"
+            curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+              -H 'Accept: application/json' \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_READ_TOKEN}" \
+              "$url" -o "/tmp/${worker}.json"
+            WORKER="$worker" python3 - <<'PY'
+          import json, os, re
+          worker = os.environ['WORKER']
+          doc = json.load(open(f'/tmp/{worker}.json', encoding='utf-8'))
+          if doc.get('success') is not True:
+              code = None
+              errors = doc.get('errors')
+              if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+                  code = errors[0].get('code')
+              print(f'provider_read_failed worker={worker} code={code}')
+              raise SystemExit(1)
+          result = doc.get('result')
+          deployments = result if isinstance(result, list) else result.get('deployments', []) if isinstance(result, dict) else []
+          if not deployments:
+              print(f'provider_deployment_missing worker={worker}')
+              raise SystemExit(1)
+          latest = deployments[0] if isinstance(deployments[0], dict) else {}
+          dep_id = str(latest.get('id') or '')
+          versions = latest.get('versions') if isinstance(latest.get('versions'), list) else []
+          safe_versions = []
+          for item in versions[:3]:
+              if not isinstance(item, dict):
+                  continue
+              version_id = str(item.get('version_id') or '')
+              percentage = item.get('percentage')
+              safe_versions.append({'version_id': version_id, 'percentage': percentage})
+          if not re.fullmatch(r'[0-9a-fA-F-]{36}', dep_id):
+              print(f'provider_deployment_id_invalid worker={worker}')
+              raise SystemExit(1)
+          print(json.dumps({'worker': worker, 'deployment_id': dep_id, 'versions': safe_versions}, separators=(',', ':')))
+          PY
+          done
+
+      - name: Read live health
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+            https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/healthz -o /tmp/pwa-health.json
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+            https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/health -o /tmp/ingress-health.json
+          python3 - <<'PY'
+          import json
+          pwa = json.load(open('/tmp/pwa-health.json', encoding='utf-8'))
+          ingress = json.load(open('/tmp/ingress-health.json', encoding='utf-8'))
+          print('pwa_health=' + json.dumps({
+              'status': pwa.get('status'),
+              'component': pwa.get('component'),
+              'control_revision': pwa.get('control_revision')
+          }, separators=(',', ':')))
+          print('ingress_health=' + json.dumps({
+              'ok': ingress.get('ok'),
+              'phase': ingress.get('phase'),
+              'zrWebhookReady': ingress.get('zrWebhookReady'),
+              'zrIngressEnabled': ingress.get('zrIngressEnabled'),
+              'queueBound': ingress.get('queueBound')
+          }, separators=(',', ':')))
+          if pwa.get('status') != 'ok' or ingress.get('ok') is not True:
+              raise SystemExit(1)
+          PY
