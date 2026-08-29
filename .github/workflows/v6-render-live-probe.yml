@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Read Render health identity
         env:
-          HEALTH_ENDPOINT: https://mp-export-zr-connector.onrender.com/healthz
+          HEALTH_ENDPOINT: https://mp-export-zr-connector.onrender.com/health
         run: |
           set -euo pipefail
           code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
@@ -29,4 +29,6 @@ jobs:
               s=str(v)
               return s if re.fullmatch(r'[A-Za-z0-9_.:-]{1,120}', s) else 'redacted'
           print(f"render_health http={safe(os.environ['HEALTH_HTTP'])} status={safe(value.get('status',''))} git_commit={safe(value.get('git_commit',''))}")
+          if os.environ['HEALTH_HTTP'] != '200' or str(value.get('status','')) != 'ok':
+              raise SystemExit('render health gate failed')
           PY
