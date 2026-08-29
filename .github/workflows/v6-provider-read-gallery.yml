@@ -1,4 +1,4 @@
-name: V6 public control route probe
+name: V6 ingress result collector
 
 on:
   push:
@@ -11,18 +11,32 @@ permissions:
   contents: read
 
 jobs:
-  route-probe:
+  collect-ingress-result:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Inspect public control route metadata
+      - name: Collect encrypted native result from ingress
         shell: bash
         run: |
           set -euo pipefail
-          endpoint='https://mp-zr-express-pwa.eastcoast22-ec.workers.dev/__control/public-result/circleci-public-v4-20260829-v6job1614'
-          curl --silent --show-error --location --proto '=https' --tlsv1.2 \
+          umask 077
+          endpoint='https://mp-zr-webhook-ingress.eastcoast22-ec.workers.dev/__control/chatgpt-result'
+          code="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
             --retry 1 --retry-delay 1 \
-            -o /tmp/body.bin \
-            -w 'http=%{http_code}\neffective_url=%{url_effective}\ncontent_type=%{content_type}\nredirects=%{num_redirects}\nbytes=%{size_download}\n' \
-            "$endpoint"
-          rm -f /tmp/body.bin
+            -o /tmp/chatgpt-result.json \
+            -w '%{http_code}' \
+            "$endpoint")"
+          echo "chatgpt_result_http=${code}"
+          if [ "$code" != '200' ]; then
+            cat /tmp/chatgpt-result.json || true
+            exit 1
+          fi
+          python3 -c 'import json; d=json.load(open("/tmp/chatgpt-result.json")); assert d.get("version")==1; assert d.get("alg")=="A256GCM"; print("encrypted_native_result_ready=true")'
+      - name: Upload encrypted native result
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: v6-ingress-native-result
+          path: /tmp/chatgpt-result.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
