@@ -1,0 +1,95 @@
+name: V6 Gallery Cloudflare provider read
+
+on:
+  push:
+    branches:
+      - diagnostic/v6-gallery-provider-read-20260829
+    paths:
+      - .github/workflows/v6-gallery-provider-read.yml
+
+permissions:
+  contents: read
+
+jobs:
+  provider-read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read exact Cloudflare worker deployment identity
+        env:
+          CLOUDFLARE_API_READ_TOKEN: ${{ secrets.CLOUDFLARE_API_READ_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          workers = ("mp-zr-express-pwa", "mp-zr-webhook-ingress")
+          token = (os.environ.get("CLOUDFLARE_API_READ_TOKEN") or os.environ.get("CLOUDFLARE_API_TOKEN") or "").strip()
+          account = (os.environ.get("CLOUDFLARE_ACCOUNT_ID") or "3ff245d3b08359d3d430491521ba58a2").strip()
+          uuid_re = re.compile(r"^[0-9a-fA-F-]{36}$")
+          account_re = re.compile(r"^[0-9a-fA-F]{32}$")
+
+          if not token:
+              print(json.dumps({"schema_version": 1, "status": "credentials_unavailable", "workers": list(workers)}, separators=(",", ":")))
+              raise SystemExit(20)
+          if not account_re.fullmatch(account):
+              print(json.dumps({"schema_version": 1, "status": "account_invalid"}, separators=(",", ":")))
+              raise SystemExit(21)
+
+          result = {}
+          for worker in workers:
+              encoded = urllib.parse.quote(worker, safe="")
+              url = f"https://api.cloudflare.com/client/v4/accounts/{account}/workers/scripts/{encoded}/deployments"
+              req = urllib.request.Request(url, headers={"Accept": "application/json", "Authorization": f"Bearer {token}"})
+              try:
+                  with urllib.request.urlopen(req, timeout=25) as response:
+                      doc = json.load(response)
+                      status = response.status
+              except urllib.error.HTTPError as exc:
+                  code = None
+                  try:
+                      err = json.load(exc)
+                      code = (err.get("errors") or [{}])[0].get("code")
+                  except Exception:
+                      pass
+                  print(json.dumps({"schema_version": 1, "status": "provider_read_error", "worker": worker, "error": f"http_{exc.code}_cf_{code or 'unknown'}"}, separators=(",", ":")))
+                  raise SystemExit(22)
+              except Exception as exc:
+                  print(json.dumps({"schema_version": 1, "status": "provider_read_error", "worker": worker, "error": f"transport_{type(exc).__name__}"}, separators=(",", ":")))
+                  raise SystemExit(23)
+
+              if status != 200 or doc.get("success") is not True:
+                  print(json.dumps({"schema_version": 1, "status": "provider_read_error", "worker": worker, "error": f"invalid_http_{status}"}, separators=(",", ":")))
+                  raise SystemExit(24)
+              raw = doc.get("result")
+              deployments = raw if isinstance(raw, list) else (raw or {}).get("deployments", [])
+              if not deployments:
+                  print(json.dumps({"schema_version": 1, "status": "provider_read_error", "worker": worker, "error": "empty"}, separators=(",", ":")))
+                  raise SystemExit(25)
+
+              latest = deployments[0]
+              versions = [
+                  {"version_id": str(v.get("version_id") or ""), "percentage": float(v.get("percentage") or 0)}
+                  for v in (latest.get("versions") or [])
+              ]
+              active = [v for v in versions if abs(v["percentage"] - 100.0) < 1e-9]
+              if len(versions) != 1 or len(active) != 1:
+                  print(json.dumps({"schema_version": 1, "status": "traffic_not_single_100", "worker": worker, "versions": versions}, separators=(",", ":")))
+                  raise SystemExit(26)
+              deployment_id = str(latest.get("id") or "")
+              version_id = active[0]["version_id"]
+              if not uuid_re.fullmatch(deployment_id) or not uuid_re.fullmatch(version_id):
+                  print(json.dumps({"schema_version": 1, "status": "identity_invalid", "worker": worker}, separators=(",", ":")))
+                  raise SystemExit(27)
+              result[worker] = {"deployment_id": deployment_id, "version_id": version_id, "traffic": 100}
+
+          print(json.dumps({"schema_version": 1, "status": "pass", "workers": result, "secrets_exposed": False}, sort_keys=True, separators=(",", ":")))
+          PY
