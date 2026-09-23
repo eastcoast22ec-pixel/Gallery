@@ -1,4 +1,4 @@
-name: Create Maya short link
+name: Verify Maya short link
 
 on:
   push:
@@ -10,17 +10,19 @@ permissions:
   contents: read
 
 jobs:
-  shorten:
+  verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Create TinyURL
+      - name: Verify short URL end to end
         shell: bash
         run: |
           set -euo pipefail
-          TARGET='https://raw.githack.com/eastcoast22ec-pixel/Gallery/maya-links/maya/index.html'
-          RESULT="$(curl -fsS -G 'https://tinyurl.com/api-create.php' --data-urlencode "url=$TARGET")"
-          if [[ ! "$RESULT" =~ ^https://tinyurl\.com/ ]]; then
-            echo "Invalid short URL response: $RESULT" >&2
+          SHORT='https://tinyurl.com/2coq98uu'
+          FINAL="$(curl -L -fsS -o /tmp/maya.html -w '%{url_effective}' "$SHORT")"
+          CODE="$(curl -L -sS -o /dev/null -w '%{http_code}' "$SHORT")"
+          grep -q 'Maya Linge de Maison' /tmp/maya.html
+          echo "FINAL_URL=$FINAL"
+          echo "HTTP_CODE=$CODE"
+          if [[ "$CODE" != "200" ]]; then
             exit 1
           fi
-          echo "SHORT_URL=$RESULT"
