@@ -13,16 +13,14 @@ jobs:
   shorten:
     runs-on: ubuntu-latest
     steps:
-      - name: Create v.gd short link
+      - name: Create TinyURL
         shell: bash
         run: |
           set -euo pipefail
           TARGET='https://raw.githack.com/eastcoast22ec-pixel/Gallery/maya-links/maya/index.html'
-          RESULT="$(curl -fsS -G 'https://v.gd/create.php' \
-            --data-urlencode 'format=simple' \
-            --data-urlencode "url=$TARGET")"
-          if [[ "$RESULT" == Error:* ]]; then
-            echo "$RESULT" >&2
+          RESULT="$(curl -fsS -G 'https://tinyurl.com/api-create.php' --data-urlencode "url=$TARGET")"
+          if [[ ! "$RESULT" =~ ^https://tinyurl\.com/ ]]; then
+            echo "Invalid short URL response: $RESULT" >&2
             exit 1
           fi
           echo "SHORT_URL=$RESULT"
