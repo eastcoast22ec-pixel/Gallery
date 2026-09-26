@@ -1,3 +1,14 @@
+<!-- CURRENT-RECONCILIATION-2026-09-26-GALLERY -->
+> **CURRENT GALLERY RECONCILIATION — 2026-09-26**
+>
+> - `main@74a5e153993948c99f6331b9cf73d2760b086a6d` before this continuity-only write.
+> - repository remains **STABLE / DORMANT / NO ACTIVE BACKLOG**.
+> - accepted Product baseline remains `93023f08bf5bbd949a6481a1a4054568b0f70f9d`.
+> - all later observed main changes are policy-only (`AGENTS.md`); no Gallery Product-code delta is implied.
+> - no Build, Deploy, runtime, or user-acceptance action is required by reconciliation.
+>
+> **NEXT ACTION:** none. Reopen only on explicit new owner scope or fresh regression evidence.
+>
 # PROJECT_STATE — Gallery
 
 Last material update: 2026-08-31 — portfolio cleanup classification.
