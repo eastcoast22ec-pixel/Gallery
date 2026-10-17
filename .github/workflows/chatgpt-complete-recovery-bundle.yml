@@ -1,0 +1,83 @@
+name: ChatGPT Complete Recovery Bundle
+
+on:
+  push:
+    branches:
+      - backup/chatgpt-complete-recovery-20261017
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Create and verify complete repository bundle
+        shell: bash
+        env:
+          EXPECTED_MAIN_SHA: e2de6168beab728f8d04b8eb01be5f6ec9ce3e55
+          TEMP_BRANCH: backup/chatgpt-complete-recovery-20261017
+        run: |
+          set -euo pipefail
+
+          git clone --mirror "https://github.com/${GITHUB_REPOSITORY}.git" mirror.git
+
+          actual_main="$(git --git-dir=mirror.git rev-parse refs/heads/main)"
+          if [[ "$actual_main" != "$EXPECTED_MAIN_SHA" ]]; then
+            echo "main moved: expected=$EXPECTED_MAIN_SHA actual=$actual_main" >&2
+            exit 41
+          fi
+
+          # Exclude the temporary backup-control branch so the bundle represents
+          # the repository state that existed before this backup workflow was added.
+          git --git-dir=mirror.git update-ref -d "refs/heads/${TEMP_BRANCH}" || true
+
+          git --git-dir=mirror.git fsck --full --strict
+
+          mkdir -p out
+          bundle="out/Gallery-full-repository-e2de6168.bundle"
+          git --git-dir=mirror.git bundle create "$bundle" --all
+          git --git-dir=mirror.git bundle verify "$bundle"
+
+          git --git-dir=mirror.git show-ref | LC_ALL=C sort > out/GALLERY_REFS.txt
+          git bundle list-heads "$bundle" | LC_ALL=C sort > out/GALLERY_BUNDLE_HEADS.txt
+          sha256sum "$bundle" > out/GALLERY_BUNDLE_SHA256.txt
+
+          git clone --mirror "$bundle" restored.git
+          git --git-dir=restored.git fsck --full --strict
+          restored_main="$(git --git-dir=restored.git rev-parse refs/heads/main)"
+          if [[ "$restored_main" != "$EXPECTED_MAIN_SHA" ]]; then
+            echo "restore mismatch: expected=$EXPECTED_MAIN_SHA actual=$restored_main" >&2
+            exit 42
+          fi
+
+          ref_count="$(wc -l < out/GALLERY_REFS.txt | tr -d ' ')"
+          bundle_ref_count="$(wc -l < out/GALLERY_BUNDLE_HEADS.txt | tr -d ' ')"
+          bundle_size="$(stat -c '%s' "$bundle")"
+          bundle_sha="$(cut -d ' ' -f1 out/GALLERY_BUNDLE_SHA256.txt)"
+
+          cat > out/GALLERY_RECOVERY_BUILD_REPORT.txt <<EOF
+          Repository: ${GITHUB_REPOSITORY}
+          Expected main SHA: ${EXPECTED_MAIN_SHA}
+          Actual main SHA: ${actual_main}
+          Restored main SHA: ${restored_main}
+          Temporary control branch excluded: ${TEMP_BRANCH}
+          Mirror fsck: PASS
+          Bundle verify: PASS
+          Restore clone: PASS
+          Restored fsck: PASS
+          Mirror ref count: ${ref_count}
+          Bundle listed ref count: ${bundle_ref_count}
+          Bundle size bytes: ${bundle_size}
+          Bundle SHA-256: ${bundle_sha}
+          Created UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          EOF
+
+      - name: Upload recovery artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gallery-complete-recovery-e2de6168
+          path: out/*
+          if-no-files-found: error
+          retention-days: 7
