@@ -4,7 +4,9 @@ import android.content.Intent
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
+import android.os.SystemClock
 import android.view.Menu
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
@@ -245,7 +247,9 @@ class MediaAdapter(
 
     override fun onActionModeCreated() {}
 
-    override fun onActionModeDestroyed() {}
+    override fun onActionModeDestroyed() {
+        cancelRecyclerSelectionGesture()
+    }
 
     override fun onViewRecycled(holder: ViewHolder) {
         super.onViewRecycled(holder)
@@ -259,6 +263,101 @@ class MediaAdapter(
     }
 
     fun isASectionTitle(position: Int) = media.getOrNull(position) is ThumbnailSection
+
+    fun getSelectedCount(positions: List<Int>): Int {
+        if (!isSelectionModeActive()) {
+            return 0
+        }
+
+        return positions.count { position ->
+            getItemSelectionKey(position)?.let(selectedKeys::contains) == true
+        }
+    }
+
+    fun setPositionsSelected(positions: List<Int>, select: Boolean): Boolean {
+        if (positions.isEmpty()) {
+            return false
+        }
+
+        if (!isSelectionModeActive()) {
+            clearDetachedSelectionState()
+            if (!select) {
+                return true
+            }
+            if (!startSelectionMode()) {
+                return false
+            }
+        }
+
+        val changedPositions = positions.filter { position ->
+            if (!getIsItemSelectable(position)) {
+                return@filter false
+            }
+            val key = getItemSelectionKey(position) ?: return@filter false
+            selectedKeys.contains(key) != select
+        }
+
+        changedPositions.forEachIndexed { index, position ->
+            toggleItemSelection(
+                select,
+                position,
+                updateTitle = index == changedPositions.lastIndex,
+            )
+        }
+        return true
+    }
+
+    private fun isSelectionModeActive(): Boolean {
+        return actMode != null && actModeCallback.isSelectable
+    }
+
+    private fun startSelectionMode(): Boolean {
+        if (isSelectionModeActive()) {
+            return true
+        }
+
+        cancelRecyclerSelectionGesture()
+        clearDetachedSelectionState()
+        activity.startActionMode(actModeCallback)
+        return isSelectionModeActive()
+    }
+
+    private fun clearDetachedSelectionState() {
+        if (actMode != null) {
+            return
+        }
+
+        actModeCallback.isSelectable = false
+        if (selectedKeys.isNotEmpty()) {
+            selectedKeys.clear()
+            notifyDataSetChanged()
+        }
+    }
+
+    private fun resetSelectionSessionForDatasetChange() {
+        cancelRecyclerSelectionGesture()
+        if (actMode != null) {
+            finishActMode()
+        } else {
+            actModeCallback.isSelectable = false
+            selectedKeys.clear()
+        }
+    }
+
+    private fun cancelRecyclerSelectionGesture() {
+        val now = SystemClock.uptimeMillis()
+        MotionEvent.obtain(
+            now,
+            now,
+            MotionEvent.ACTION_CANCEL,
+            0f,
+            0f,
+            0,
+        ).also { cancelEvent ->
+            recyclerView.dispatchTouchEvent(cancelEvent)
+            cancelEvent.recycle()
+        }
+    }
 
     private fun checkHideBtnVisibility(menu: Menu, selectedItems: ArrayList<Medium>) {
         val isInRecycleBin = selectedItems.firstOrNull()?.getIsInRecycleBin() == true
@@ -628,10 +727,10 @@ class MediaAdapter(
     fun updateMedia(newMedia: ArrayList<ThumbnailItem>) {
         val thumbnailItems = newMedia.clone() as ArrayList<ThumbnailItem>
         if (thumbnailItems.hashCode() != currentMediaHash) {
+            resetSelectionSessionForDatasetChange()
             currentMediaHash = thumbnailItems.hashCode()
             media = thumbnailItems
             notifyDataSetChanged()
-            finishActMode()
         }
     }
 
