@@ -316,7 +316,6 @@ class MediaAdapter(
             return true
         }
 
-        cancelRecyclerSelectionGesture()
         clearDetachedSelectionState()
         activity.startActionMode(actModeCallback)
         return isSelectionModeActive()
@@ -327,18 +326,21 @@ class MediaAdapter(
             return
         }
 
-        actModeCallback.isSelectable = false
-        if (selectedKeys.isNotEmpty()) {
-            selectedKeys.clear()
-            notifyDataSetChanged()
+        if (actModeCallback.isSelectable || selectedKeys.isNotEmpty()) {
+            cancelRecyclerSelectionGesture()
+            actModeCallback.isSelectable = false
+            if (selectedKeys.isNotEmpty()) {
+                selectedKeys.clear()
+                notifyDataSetChanged()
+            }
         }
     }
 
     private fun resetSelectionSessionForDatasetChange() {
-        cancelRecyclerSelectionGesture()
         if (actMode != null) {
             finishActMode()
-        } else {
+        } else if (actModeCallback.isSelectable || selectedKeys.isNotEmpty()) {
+            cancelRecyclerSelectionGesture()
             actModeCallback.isSelectable = false
             selectedKeys.clear()
         }
