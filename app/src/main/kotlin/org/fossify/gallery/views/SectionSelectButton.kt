@@ -74,53 +74,10 @@ class SectionSelectButton @JvmOverloads constructor(
             return
         }
 
-        if (DateSectionSelectionController.areAllSelected(adapter, positions)) {
-            DateSectionSelectionController.applySelection(adapter, positions, select = false)
+        val select = !DateSectionSelectionController.areAllSelected(adapter, positions)
+        if (DateSectionSelectionController.applySelection(adapter, positions, select)) {
             scheduleRefresh()
-        } else {
-            ensureSelectionModeAndSelect(sectionContext.recyclerView, adapter, positions)
         }
-    }
-
-    private fun ensureSelectionModeAndSelect(
-        recyclerView: RecyclerView,
-        adapter: MediaAdapter,
-        positions: List<Int>,
-        attempt: Int = 0,
-    ) {
-        if (DateSectionSelectionController.hasSelection(adapter)) {
-            DateSectionSelectionController.applySelection(adapter, positions, select = true)
-            scheduleRefresh()
-            return
-        }
-
-        val firstPosition = positions.first()
-        val firstHolder = recyclerView.findViewHolderForAdapterPosition(firstPosition)
-        if (firstHolder != null) {
-            firstHolder.itemView.performLongClick()
-            if (DateSectionSelectionController.hasSelection(adapter)) {
-                DateSectionSelectionController.applySelection(adapter, positions, select = true)
-                scheduleRefresh()
-            }
-            return
-        }
-
-        if (attempt >= MAX_LAYOUT_RETRIES) {
-            return
-        }
-
-        recyclerView.scrollToPosition(firstPosition)
-        recyclerView.postDelayed(
-            {
-                ensureSelectionModeAndSelect(
-                    recyclerView,
-                    adapter,
-                    positions,
-                    attempt + 1,
-                )
-            },
-            RETRY_DELAY_MS,
-        )
     }
 
     private fun refreshState() {
@@ -210,7 +167,6 @@ class SectionSelectButton @JvmOverloads constructor(
         }
 
         return SectionContext(
-            recyclerView = recyclerView,
             sectionItemView = sectionItemView,
             adapter = adapter,
             sectionPosition = sectionPosition,
@@ -218,14 +174,8 @@ class SectionSelectButton @JvmOverloads constructor(
     }
 
     private data class SectionContext(
-        val recyclerView: RecyclerView,
         val sectionItemView: View,
         val adapter: MediaAdapter,
         val sectionPosition: Int,
     )
-
-    private companion object {
-        const val MAX_LAYOUT_RETRIES = 3
-        const val RETRY_DELAY_MS = 32L
-    }
 }
